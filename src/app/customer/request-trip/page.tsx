@@ -1,3 +1,4 @@
+
 "use client";
 import LocationInputForm from "@/components/customer/location-input-form";
 import ProtectedRoute from "@/components/protected-route";
@@ -12,11 +13,11 @@ export default function RequestTripPage() {
         </div>
         <div className="w-full lg:w-1/2 mt-8 lg:mt-0">
           <div className="bg-card p-4 rounded-lg shadow-lg">
-            <h2 className="text-xl font-semibold text-primary mb-4">Live Map Preview</h2>
+            <h2 className="text-xl font-semibold text-primary mb-4">Vista Previa del Mapa en Vivo</h2>
             <div className="aspect-video bg-muted rounded-md overflow-hidden">
               <Image
                 src="https://picsum.photos/800/450?random=1"
-                alt="Map showing mock route"
+                alt="Mapa mostrando ruta simulada"
                 width={800}
                 height={450}
                 className="object-cover w-full h-full"
@@ -25,7 +26,7 @@ export default function RequestTripPage() {
               />
             </div>
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              Your route will be displayed here.
+              Tu ruta se mostrará aquí.
             </p>
           </div>
         </div>
@@ -33,3 +34,4 @@ export default function RequestTripPage() {
     </ProtectedRoute>
   );
 }
+

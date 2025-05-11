@@ -1,9 +1,10 @@
+
 "use client";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MapPin, User, Star, Car, Phone, XCircle, DollarSign } from "lucide-react";
+import { Clock, MapPin, User, Star, Car, Phone, XCircle, DollarSign } from "lucide-react"; // Ensure DollarSign is imported
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,15 +18,19 @@ interface MockDriver {
   rating: number;
 }
 
+type TripStatus = 'Conductor en camino' | 'Viaje en curso' | 'Ha llegado';
+
 interface MockTripDetails {
   origin: string;
   destination: string;
-  status: 'Driver en route' | 'Trip in progress' | 'Arrived';
+  status: TripStatus;
   etaMinutes: number;
   driver: MockDriver;
   fare?: string;
   distance?: string;
 }
+
+const CURRENCY_SYMBOL = "RD$";
 
 export default function TripInfoDisplay() {
   const searchParams = useSearchParams();
@@ -36,16 +41,20 @@ export default function TripInfoDisplay() {
     const fare = searchParams.get('fare');
     const distance = searchParams.get('distance');
 
+    // Determine status randomly or based on some logic for mock
+    const statuses: TripStatus[] = ['Conductor en camino', 'Viaje en curso', 'Ha llegado'];
+    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+
     setTripDetails({
-      origin: "123 Main St, Cityville", // Mocked
-      destination: "789 Market Ave, Townburg", // Mocked
-      status: 'Driver en route',
-      etaMinutes: 12,
+      origin: "Av. Luperón 34, Santo Domingo", // Mocked
+      destination: "Plaza Sambil, Av. John F. Kennedy", // Mocked
+      status: randomStatus,
+      etaMinutes: Math.floor(Math.random() * 15) + 5, // 5 to 19 minutes
       driver: {
-        name: "John Doe",
-        avatarUrl: "https://picsum.photos/seed/johndoe/100/100",
-        vehicleModel: "Toyota Camry (Blue)",
-        licensePlate: "XYZ 123",
+        name: "Juan Pérez",
+        avatarUrl: "https://picsum.photos/seed/juanperez/100/100",
+        vehicleModel: "Toyota Corolla (Rojo)",
+        licensePlate: "A123456",
         rating: 4.9,
       },
       fare: fare || undefined,
@@ -72,8 +81,8 @@ export default function TripInfoDisplay() {
           <div className="h-4 bg-muted rounded w-5/6"></div>
         </CardContent>
         <CardFooter className="flex justify-between">
-           <div className="h-10 bg-muted rounded w-24"></div>
-           <div className="h-10 bg-muted rounded w-24"></div>
+           <div className="h-10 bg-muted rounded w-32"></div>
+           <div className="h-10 bg-muted rounded w-32"></div>
         </CardFooter>
       </Card>
     );
@@ -86,10 +95,10 @@ export default function TripInfoDisplay() {
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-2xl">Your Trip Details</CardTitle>
-            <CardDescription>Track your ride in real-time.</CardDescription>
+            <CardTitle className="text-2xl">Detalles de tu Viaje</CardTitle>
+            <CardDescription>Sigue tu viaje en tiempo real.</CardDescription>
           </div>
-          <Badge variant={status === 'Arrived' ? "default" : "outline"} className="text-sm whitespace-nowrap">
+          <Badge variant={status === 'Ha llegado' ? "default" : "outline"} className="text-sm whitespace-nowrap">
             {status}
           </Badge>
         </div>
@@ -114,19 +123,19 @@ export default function TripInfoDisplay() {
         <div className="space-y-3">
           <div className="flex items-center text-md">
             <Clock className="h-5 w-5 mr-3 text-primary" />
-            <span>Estimated arrival for pickup: <strong className="text-accent">{etaMinutes} minutes</strong></span>
+            <span>Llegada estimada para recogida: <strong className="text-accent">{etaMinutes} minutos</strong></span>
           </div>
           <div className="flex items-start text-md">
             <MapPin className="h-5 w-5 mr-3 text-primary mt-1" />
             <div>
-              <span className="font-medium">From:</span> {origin}<br />
-              <span className="font-medium">To:</span> {destination}
+              <span className="font-medium">Origen:</span> {origin}<br />
+              <span className="font-medium">Destino:</span> {destination}
             </div>
           </div>
           {fare && distance && (
             <div className="flex items-center text-md">
                <DollarSign className="h-5 w-5 mr-3 text-primary" />
-               <span>Fare: <strong className="text-accent">${fare}</strong> ({distance} km)</span>
+               <span>Tarifa: <strong className="text-accent">{CURRENCY_SYMBOL}{fare}</strong> ({distance} km)</span>
             </div>
           )}
         </div>
@@ -134,7 +143,7 @@ export default function TripInfoDisplay() {
         <div className="aspect-video bg-muted rounded-lg overflow-hidden border">
             <Image 
               src="https://picsum.photos/800/450?random=2" 
-              alt="Live map placeholder" 
+              alt="Marcador de mapa en vivo" 
               width={800} height={450} 
               className="object-cover w-full h-full"
               data-ai-hint="map tracking driver" 
@@ -143,12 +152,13 @@ export default function TripInfoDisplay() {
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3">
         <Button variant="outline">
-          <Phone className="h-4 w-4 mr-2" /> Contact Driver
+          <Phone className="h-4 w-4 mr-2" /> Contactar Conductor
         </Button>
         <Button variant="destructive">
-          <XCircle className="h-4 w-4 mr-2" /> Cancel Trip
+          <XCircle className="h-4 w-4 mr-2" /> Cancelar Viaje
         </Button>
       </CardFooter>
     </Card>
   );
 }
+
