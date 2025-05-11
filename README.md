@@ -122,4 +122,4 @@ This application uses Genkit for AI-related functionalities, such as the intelli
     git push -u origin main
     ```
     (Or `master` if that's your default branch name).
-```
+```# golibre
