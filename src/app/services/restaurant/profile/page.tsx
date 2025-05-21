@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2 } from "lucide-react";
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
@@ -44,8 +44,11 @@ export default function RestaurantProfilePage() {
       restaurantName: "",
       location: "",
       description: "",
+      profileImage: null,
     },
   });
+
+  const { formState: { isSubmitting, isDirty, isSubmitSuccessful } } = form;
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -56,16 +59,18 @@ export default function RestaurantProfilePage() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+      form.setValue('profileImage', event.target.files, { shouldDirty: true });
     } else {
-      // If no file is selected, or selection is cleared, revert to placeholder
       setImageFile(null);
-      setImagePreview("https://placehold.co/128x128.png?text=Logo");
+      // Revert to placeholder only if there was no previous image or we want to clear it
+      if (!form.getValues("profileImage")) { // A bit simplistic, might need adjustment based on desired clear behavior
+          setImagePreview("https://placehold.co/128x128.png?text=Logo");
+      }
+      form.setValue('profileImage', null, { shouldDirty: true });
     }
   };
 
   async function onSubmit(data: RestaurantProfileFormData) {
-    // Here you would typically handle image upload to a storage service (e.g., Firebase Storage)
-    // and then save the profile data (including the image URL) to your database.
     console.log("Restaurant Profile Data:", data);
     console.log("Image File:", imageFile);
 
@@ -76,8 +81,26 @@ export default function RestaurantProfilePage() {
       title: "¡Perfil Guardado!",
       description: "La información de tu restaurante ha sido guardada exitosamente.",
     });
-    // Potentially redirect to a restaurant dashboard or back to service selection
-    // router.push('/services/restaurant/dashboard'); 
+    
+    // Reset the form with the submitted data, making it "not dirty"
+    // and marking the submission as successful.
+    // Keep the imageFile state as is, since it's not part of `data` directly in this way.
+    // The profileImage field in `data` will be the FileList.
+    const submittedDataWithImage = { ...data, profileImage: imageFile ? data.profileImage : null };
+    form.reset(submittedDataWithImage); 
+    // If imageFile was part of the submission, and we got a new URL, we'd update imagePreview here.
+    // For now, imagePreview is already showing the locally selected file.
+  }
+
+  let buttonText = "Guardar Cambios";
+  let ButtonIcon = Save;
+
+  if (isSubmitting) {
+    buttonText = "Guardando...";
+    ButtonIcon = Loader2;
+  } else if (isSubmitSuccessful && !isDirty) {
+    buttonText = "Cambios Guardados";
+    ButtonIcon = Check;
   }
 
   return (
@@ -99,7 +122,7 @@ export default function RestaurantProfilePage() {
                 <FormField
                   control={form.control}
                   name="profileImage"
-                  render={({ field }) => (
+                  render={({ field }) => ( // field is not directly used for value due to custom handler
                     <FormItem className="flex flex-col items-center">
                       <FormLabel htmlFor="profile-image-upload" className="cursor-pointer">
                         <Avatar className="h-32 w-32 border-2 border-primary/50 hover:border-primary transition-colors">
@@ -115,10 +138,8 @@ export default function RestaurantProfilePage() {
                           type="file"
                           accept="image/png, image/jpeg, image/webp"
                           className="sr-only" // Hidden, triggered by label
-                          onChange={(e) => {
-                            handleImageChange(e);
-                            field.onChange(e.target.files); // Inform react-hook-form
-                          }}
+                          onChange={handleImageChange} // Uses custom handler
+                          ref={field.ref} // Still need ref for react-hook-form
                         />
                       </FormControl>
                       <FormDescription className="mt-2 text-center">
@@ -182,9 +203,14 @@ export default function RestaurantProfilePage() {
                 />
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={form.formState.isSubmitting}>
-                  <Save className="mr-2 h-5 w-5"/>
-                  {form.formState.isSubmitting ? "Guardando..." : "Guardar Cambios"}
+                <Button 
+                  type="submit" 
+                  className="w-full text-lg py-6" 
+                  size="lg" 
+                  disabled={isSubmitting || (isSubmitSuccessful && !isDirty)}
+                >
+                  <ButtonIcon className={`mr-2 h-5 w-5 ${isSubmitting ? 'animate-spin' : ''}`}/>
+                  {buttonText}
                 </Button>
               </CardFooter>
             </form>
