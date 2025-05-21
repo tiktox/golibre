@@ -6,14 +6,14 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, Car } from 'lucide-react'; // Icons for the new buttons
+import { Users, Car } from 'lucide-react';
 
 export default function HomePage() {
-  const { user, role, loading, isInitializing, signIn } = useAuth(); // Added signIn
+  const { user, role, loading, isInitializing } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isInitializing && !loading) { // Ensure local storage check is complete
+    if (!isInitializing && !loading) {
       if (user && role) {
         if (role === 'customer') {
           router.replace('/customer/request-trip');
@@ -46,10 +46,10 @@ export default function HomePage() {
 
       {!user ? (
         <div className="space-y-6 mt-8 w-full max-w-md">
-          <p className="text-lg font-medium text-foreground">Elige tu experiencia:</p>
+          <p className="text-lg font-medium text-foreground">Elige tu experiencia o regístrate:</p>
           <div className="grid grid-cols-1 gap-4">
             <Button 
-              onClick={signIn} 
+              onClick={() => router.push('/auth')} 
               variant="default" 
               size="lg" 
               className="w-full py-6 text-lg"
@@ -58,7 +58,7 @@ export default function HomePage() {
               Entrar como Cliente
             </Button>
             <Button 
-              onClick={signIn} 
+              onClick={() => router.push('/auth')} 
               variant="secondary" 
               size="lg" 
               className="w-full py-6 text-lg"
@@ -68,11 +68,10 @@ export default function HomePage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Serás redirigido para iniciar sesión con Google. La selección de rol se confirmará después si es necesario.
+            Serás redirigido para iniciar sesión o registrarte. La selección de rol se confirmará después si es necesario.
           </p>
         </div>
       ) : !role ? (
-        // Fallback if redirect hasn't happened yet or user lands here unexpectedly
         <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
           Seleccionar Rol
         </Button>
