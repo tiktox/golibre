@@ -40,25 +40,21 @@ type SignInFormData = z.infer<typeof signInSchema>;
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
 export default function AuthPage() {
-  const { user, role, signIn, signUp, loading: authLoading, isInitializing } = useAuth();
+  const { user, signIn, signUp, loading: authLoading, isInitializing } = useAuth();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-     if (!isInitializing && !authLoading) {
-      if (user && role) { 
-        // If user has role, redirect to driver dashboard (focusing on driver)
-        router.replace('/driver/dashboard');
-      } else if (user && !role) { 
-        // User is logged in, but role might not be set yet by AuthContext.
-        // AuthContext will default to 'customer', and then this useEffect will redirect
-        // to driver dashboard as per the logic above.
-        // Or, RoleSelectionPage will handle it if redirected there.
-        router.replace('/driver/dashboard'); // Temporary redirect, role should be set soon
-      }
+     if (!isInitializing && !authLoading && user) {
+      // If auth is initialized, not actively loading, and user object exists,
+      // it means authentication was successful. Redirect to the main dashboard.
+      // The role ('customer' by default, treated as 'driver') is handled by AuthContext
+      // and protected routes.
+      router.replace('/driver/dashboard');
     }
-  }, [user, role, authLoading, isInitializing, router]);
+    // If user is null, no redirect happens, auth form stays.
+  }, [user, authLoading, isInitializing, router]);
 
   const signInForm = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
@@ -77,7 +73,7 @@ export default function AuthPage() {
 
   const handleSignUp = async (data: SignUpFormData) => {
     await signUp(data.email, data.password, data.displayName);
-    // Redirection handled by useEffect (AuthContext sets role to customer, then this useEffect redirects)
+    // Redirection handled by useEffect
   };
   
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
