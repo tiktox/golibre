@@ -9,64 +9,54 @@ import { Skeleton } from './ui/skeleton';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  /** 
-   * List of roles allowed to access this route. 
-   * If `null`, any authenticated user without a specific role can access (e.g., role selection page).
-   * If `undefined` or empty array, any authenticated user with *any* role can access.
-   */
   allowedRoles?: UserRole[] | null; 
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading, isInitializing, setRole } = useAuth(); // Added setRole
+  const { user, role, loading, isInitializing, setRole } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (isInitializing || loading) return; // Wait for auth state to be fully loaded
+    if (isInitializing || loading) return; 
 
     if (!user) {
-      router.replace(`/auth?redirect=${pathname}`); // Redirect to auth page if not authenticated
+      router.replace(`/auth?redirect=${pathname}`); 
       return;
     }
 
-    // Handling for pages like /role-selection (which is now a state-fixer)
     if (allowedRoles === null) { 
-      if (role) { // If role is already set, redirect away from role selection-like pages
-        if (role === 'customer') router.replace('/customer/request-trip');
-        else if (role === 'driver') router.replace('/driver/dashboard');
-        else router.replace('/'); 
+      if (role) { 
+        // If role is already set, redirect to driver dashboard (focus on driver)
+        router.replace('/driver/dashboard');
       }
-      // If no role, user should be on the role-selection page, which will call setRole('customer')
       return;
     }
     
-    // For role-specific pages
     if (!role) { 
-      // Authenticated but no role. AuthContext should set 'customer' by default.
-      // If this state persists, it's an edge case.
-      // Attempt to set to customer, or redirect to home as a fallback.
-      // The RoleSelectionPage or AuthContext's onAuthStateChanged should typically handle this.
-      // Forcing a role here might be too aggressive; redirecting allows other mechanisms to fix state.
-      router.replace('/'); // Redirect to home, expecting AuthContext to resolve role or user to re-navigate.
+      // Authenticated but no role. AuthContext should set 'customer' (which redirects to driver) by default.
+      router.replace('/'); 
       return;
     }
 
-    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-      // If role is set but not allowed for this page, redirect to their default dashboard
-      if (role === 'customer') router.replace('/customer/request-trip');
-      else if (role === 'driver') router.replace('/driver/dashboard');
-      else router.replace('/'); // Fallback to home
+    // If current role is 'customer', it's treated as 'driver' for UI purposes.
+    // So, if allowedRoles expects 'driver', a 'customer' role should pass.
+    // If allowedRoles specifically and only expects 'customer' (which is now removed),
+    // then access should be denied (redirected).
+    const effectiveRole = role === 'customer' ? 'driver' : role;
+
+    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(effectiveRole)) {
+      // Role is not allowed for this page.
+      // Redirect to driver dashboard as the main available authenticated section.
+      router.replace('/driver/dashboard');
       return;
     }
 
   }, [user, role, loading, isInitializing, router, allowedRoles, pathname, setRole]);
 
-  // Conditions for showing loading/skeleton
   const showLoading = isInitializing || loading || !user ||
-                      (allowedRoles === null && !!role) || // On role-selection page but role already set (waiting for redirect)
-                      (allowedRoles !== null && !role && user); // On role-specific page, user exists, but role not yet (transient, waiting for redirect/role set)
-                     
+                      (allowedRoles === null && !!role) || 
+                      (allowedRoles !== null && !role && user);                     
 
   if (showLoading) {
     return (

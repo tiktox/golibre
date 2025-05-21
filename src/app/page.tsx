@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, Car } from 'lucide-react';
+import { Car } from 'lucide-react'; // Removed Users icon
 
 export default function HomePage() {
   const { user, role, loading, isInitializing } = useAuth();
@@ -15,13 +15,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!isInitializing && !loading) {
       if (user && role) {
-        if (role === 'customer') {
-          router.replace('/customer/request-trip');
-        } else if (role === 'driver') {
-          router.replace('/driver/dashboard');
-        }
+        // If user has a role, redirect to driver dashboard regardless of role for now
+        router.replace('/driver/dashboard');
       } else if (user && !role) {
-        router.replace('/role-selection');
+        // Role selection page will handle setting default role and redirecting
+        router.replace('/role-selection'); 
       }
     }
   }, [user, role, loading, router, isInitializing]);
@@ -46,17 +44,8 @@ export default function HomePage() {
 
       {!user ? (
         <div className="space-y-6 mt-8 w-full max-w-md">
-          <p className="text-lg font-medium text-foreground">Elige tu experiencia o regístrate:</p>
+          <p className="text-lg font-medium text-foreground">Únete o inicia sesión:</p>
           <div className="grid grid-cols-1 gap-4">
-            <Button 
-              onClick={() => router.push('/auth')} 
-              variant="default" 
-              size="lg" 
-              className="w-full py-6 text-lg"
-            >
-              <Users className="mr-3 h-6 w-6" />
-              Entrar como Cliente
-            </Button>
             <Button 
               onClick={() => router.push('/auth')} 
               variant="secondary" 
@@ -68,12 +57,13 @@ export default function HomePage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Serás redirigido para iniciar sesión o registrarte. La selección de rol se confirmará después si es necesario.
+            Serás redirigido para iniciar sesión o registrarte.
           </p>
         </div>
       ) : !role ? (
+         // This state should be transient, role-selection page will handle it
         <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
-          Seleccionar Rol
+          Configurar Cuenta
         </Button>
       ) : null}
     </div>

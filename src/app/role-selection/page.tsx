@@ -20,17 +20,15 @@ export default function RoleSelectionPage() {
       return;
     }
 
-    if (role) { // If role is already set, redirect to appropriate dashboard
-      if (role === 'customer') router.replace('/customer/request-trip');
-      else if (role === 'driver') router.replace('/driver/dashboard');
-      else router.replace('/'); // Fallback
+    if (role) { // If role is already set, redirect to driver dashboard (focusing on driver)
+      router.replace('/driver/dashboard');
       return;
     }
 
     // If user is logged in but has no role (should be a transient state or an edge case)
-    // Automatically set role to 'customer' and let AuthContext handle redirection.
+    // Automatically set role to 'customer' (which will behave as driver due to UI removal) and let AuthContext handle redirection.
     if (user && !role) {
-      setRole('customer');
+      setRole('customer'); // AuthContext redirects customer role to /driver/dashboard
     }
   }, [user, role, loading, isInitializing, router, setRole]);
 

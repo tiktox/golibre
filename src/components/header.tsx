@@ -6,28 +6,21 @@ import LogoIcon from './icons/logo';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
 import { useRouter } from 'next/navigation';
-import { Car, UserCog } from 'lucide-react'; // Removed UserCircle
+import { UserCog } from 'lucide-react'; // Removed Car and UserCircle
 
 export default function Header() {
   const { user, role } = useAuth();
   const router = useRouter();
 
   const getDashboardLink = () => {
-    if (role === 'customer') return '/customer/request-trip';
-    if (role === 'driver') return '/driver/dashboard';
-    // Fallback if role not set but user exists - default to customer dashboard
-    // This state should be transient as AuthContext defaults new users to 'customer'
-    if (user) return '/customer/request-trip'; 
+    // Always point to driver dashboard if user is logged in, given the current focus
+    if (user) return '/driver/dashboard';
     return '/'; // Fallback for no user
   };
 
   const getHeaderText = () => {
-    if (user && role) {
-      if (role === 'customer') return 'Cliente / GoLibre';
-      if (role === 'driver') return 'Conductor / GoLibre';
-    }
-    // If user exists but role isn't set yet (transient state), default to Cliente view
-    if (user && !role) return 'Cliente / GoLibre';
+    // If user is logged in, display "Conductor / GoLibre" due to focus on driver UI
+    if (user) return 'Conductor / GoLibre';
     return 'GoLibre';
   };
 
@@ -45,25 +38,16 @@ export default function Header() {
                 <span className="text-sm text-foreground truncate max-w-[100px] sm:max-w-[150px]" title={user.displayName || user.email || "User"}>
                   {user.displayName || user.email}
                 </span>
-                {(role || (!role && user)) && ( // Show 'Cliente' if role is customer or if role is not yet set but user exists
-                  <span className="text-xs px-2 py-1 bg-secondary text-secondary-foreground rounded-full hidden md:inline-block">
-                    {(role === 'customer' || (!role && user)) ? 'Cliente' : (role === 'driver' ? 'Conductor' : '')}
-                  </span>
-                )}
+                {/* Show 'Conductor' badge if logged in, as customer UI is removed */}
+                <span className="text-xs px-2 py-1 bg-secondary text-secondary-foreground rounded-full hidden md:inline-block">
+                  Conductor
+                </span>
               </div>
 
-              {/* Role specific buttons */}
-              {(role === 'customer' || (!role && user)) && ( // Show for customer or if role not set (defaults to customer view)
-                <Button variant="ghost" size="sm" onClick={() => router.push('/customer/request-trip')} className="hidden sm:inline-flex">
-                  <Car className="mr-2 h-4 w-4" /> Solicitar Viaje
-                </Button>
-              )}
-              {role === 'driver' && (
-                <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
-                  <UserCog className="mr-2 h-4 w-4" /> Panel Conductor
-                </Button>
-              )}
-              {/* Removed the "Seleccionar Rol" button as per request */}
+              {/* Always show driver dashboard button if logged in */}
+              <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
+                <UserCog className="mr-2 h-4 w-4" /> Panel Conductor
+              </Button>
             </>
           )}
           <AuthButton />

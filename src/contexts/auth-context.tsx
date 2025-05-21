@@ -12,7 +12,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { useToast } from '@/hooks/use-toast'; 
 
 export type UserRole = 'customer' | 'driver' | null;
 
@@ -78,17 +78,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (storedRole) {
             setRoleState(storedRole);
           } else {
-            // New user or role wiped, default to customer
+            // New user or role wiped, default to customer (will be redirected to driver UI)
             setAndStoreRole('customer', firebaseUser.uid);
           }
         } catch (error) {
           console.error("Error reading role from localStorage", error);
-          setAndStoreRole('customer', firebaseUser.uid); // Default to customer on error
+          setAndStoreRole('customer', firebaseUser.uid); // Default on error
         }
       } else {
         setUser(null);
         setRoleState(null);
-        // No need to remove general 'golibre-role' anymore, it's user-specific
       }
       if (isInitializing) {
         setIsInitializing(false);
@@ -96,7 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false); 
     });
 
-    // Fallback for initial load if onAuthStateChanged is slow
     if (!auth.currentUser && isInitializing) {
         setIsInitializing(false);
         setLoading(false);
@@ -109,14 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
-      // onAuthStateChanged will handle user and role state update
-      // Redirection will be handled by useEffect in pages based on user/role state.
+      // onAuthStateChanged handles state updates. Redirection is handled by pages.
     } catch (error: any) {
       console.error("Firebase Sign-In Error:", error);
       toast({ variant: "destructive", title: "Error de inicio de sesión", description: error.message });
-      setLoading(false); // Ensure loading is false on error
+      setLoading(false);
     }
-    // setLoading(false) will be effectively handled by onAuthStateChanged or error catch
   }, [toast]);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
@@ -126,7 +122,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userCredential.user) {
         if (displayName) {
           await updateProfile(userCredential.user, { displayName });
-           // Manually update user state for immediate display name update
            setUser({ 
             uid: userCredential.user.uid, 
             displayName, 
@@ -134,24 +129,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             photoURL: userCredential.user.photoURL 
           });
         }
-        // Default new users to customer
+        // Default new users to customer (which redirects to driver UI)
         setAndStoreRole('customer', userCredential.user.uid);
         toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
-        // Redirection to customer dashboard will be handled by useEffect in pages.
+        // Redirection handled by pages (e.g. AuthPage useEffect)
       }
     } catch (error: any) {
       console.error("Firebase Sign-Up Error:", error);
       toast({ variant: "destructive", title: "Error de registro", description: error.message });
-      setLoading(false); // Ensure loading is false on error
+      setLoading(false);
     }
-    // setLoading(false) will be effectively handled by onAuthStateChanged or error catch
   }, [toast, setAndStoreRole]);
 
   const signOut = useCallback(async () => {
     setLoading(true);
     try {
-      // No need to explicitly remove user-specific role from localStorage here,
-      // as onAuthStateChanged will set user to null, and subsequent logins will re-evaluate role.
       await firebaseSignOut(auth);
       router.push('/');
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
@@ -167,20 +159,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       setAndStoreRole(newRole, user.uid);
     } else {
-      setRoleState(newRole); // For cases where user might not be set yet
+      setRoleState(newRole); 
     }
 
-    if (newRole && user) { // Only redirect if user is definite
-      if (newRole === 'customer') {
-        router.push('/customer/request-trip');
-      } else if (newRole === 'driver') {
-        router.push('/driver/dashboard');
-      }
-    } else if (!newRole && user) { // User exists but role is being cleared (e.g. manual admin action)
-      // This case should no longer lead to /role-selection.
-      // It's an edge case, perhaps redirect to home.
+    // Redirect based on the new role, focusing on driver UI
+    if (newRole && user) { 
+      router.push('/driver/dashboard');
+    } else if (!newRole && user) { 
        router.push('/');
-    } else if (!user) { // No user, go to auth/home
+    } else if (!user) { 
       router.push('/');
     }
     setLoading(false);

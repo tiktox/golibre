@@ -47,13 +47,15 @@ export default function AuthPage() {
 
   useEffect(() => {
      if (!isInitializing && !authLoading) {
-      if (user && role) { // If user has role, redirect to dashboard
-        router.replace(role === 'customer' ? '/customer/request-trip' : '/driver/dashboard');
+      if (user && role) { 
+        // If user has role, redirect to driver dashboard (focusing on driver)
+        router.replace('/driver/dashboard');
       } else if (user && !role) { 
-        // User is logged in, but role might not be set yet by AuthContext (transient)
-        // AuthContext will default to 'customer' and handle redirection.
-        // As a fallback, or if AuthContext is slow, this will push to customer dashboard.
-        router.replace('/customer/request-trip');
+        // User is logged in, but role might not be set yet by AuthContext.
+        // AuthContext will default to 'customer', and then this useEffect will redirect
+        // to driver dashboard as per the logic above.
+        // Or, RoleSelectionPage will handle it if redirected there.
+        router.replace('/driver/dashboard'); // Temporary redirect, role should be set soon
       }
     }
   }, [user, role, authLoading, isInitializing, router]);
