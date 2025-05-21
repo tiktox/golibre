@@ -39,9 +39,9 @@ export default function HomePage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-background p-8 text-center">
       <LogoIcon className="w-24 h-24 mb-6 text-primary" />
-      <h1 className="text-5xl font-bold text-primary mb-4">Bienvenido a GoLibre</h1>
+      <h1 className="text-5xl font-bold text-primary mb-4">Te damos la bienvenida a GoLibre</h1>
       <p className="text-xl text-foreground mb-6">
-        Conectando pasajeros y conductores. ¡Tu viaje, tu libertad!
+        Digitalizando tu entorno para estar mas cerca de ti!
       </p>
 
       {!user ? (
@@ -64,7 +64,7 @@ export default function HomePage() {
               className="w-full py-6 text-lg"
             >
               <Car className="mr-3 h-6 w-6" />
-              Entrar como Conductor
+              Formo parte de Golibre
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
