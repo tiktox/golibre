@@ -38,10 +38,7 @@ export default function Header() {
                 <span className="text-sm text-foreground truncate max-w-[100px] sm:max-w-[150px]" title={user.displayName || user.email || "User"}>
                   {user.displayName || user.email}
                 </span>
-                {/* Show 'Miles de usuarios forman parte de nosotros' badge if logged in */}
-                <span className="text-xs px-2 py-1 bg-secondary text-secondary-foreground rounded-full hidden md:inline-block whitespace-nowrap">
-                  Miles de usuarios forman parte de nosotros
-                </span>
+                {/* Text "Miles de usuarios forman parte de nosotros" removed */}
               </div>
 
               {/* Always show multiservice dashboard button if logged in */}

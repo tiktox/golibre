@@ -1,20 +1,21 @@
 
 "use client";
 
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Suspense } from "react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, Bike, ScissorsIcon, Car } from "lucide-react";
+import { UtensilsCrossed, Bike, ScissorsIcon, Car, Users, HardHat, Store, Palette } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/protected-route";
-// import { useAuth } from "@/contexts/auth-context"; // Para futuras integraciones de guardado de servicio
+// import AdSuggestionDisplay from "@/components/driver/ad-suggestion-display"; // Example of server component
+// import DriverDashboardClientPart from "@/components/driver/driver-dashboard-client-part"; // Client component part
 
 interface ServiceOption {
   id: string;
   title: string;
   description: string;
   icon: React.ElementType;
-  // futurePath?: string; // Para futura navegación a dashboards específicos
 }
 
 const serviceOptions: ServiceOption[] = [
@@ -23,57 +24,46 @@ const serviceOptions: ServiceOption[] = [
     title: "Soy un Restaurante",
     description: "Ofrece tus deliciosos platos y expande tu alcance a más clientes.",
     icon: UtensilsCrossed,
-    // futurePath: "/dashboard/restaurant/setup" 
   },
   {
     id: "delivery",
     title: "Soy un Repartidor",
     description: "Entrega pedidos y paquetes con flexibilidad y genera ingresos.",
     icon: Bike,
-    // futurePath: "/dashboard/delivery/setup"
   },
   {
     id: "stylist",
     title: "Soy un Estilista",
     description: "Brinda servicios de belleza y estilismo, gestionando tus citas y clientes.",
     icon: ScissorsIcon,
-    // futurePath: "/dashboard/stylist/setup"
   },
   {
     id: "taxi",
     title: "Soy un Taxista",
     description: "Transporta pasajeros de manera segura y eficiente por la ciudad.",
     icon: Car,
-    // futurePath: "/dashboard/taxi/manage" 
   },
 ];
 
 export default function ServiceSelectionPage() {
   const { toast } = useToast();
   const router = useRouter();
-  // const { user /*, setSelectedService */ } = useAuth(); // Para el futuro
 
   const handleServiceSelection = (service: ServiceOption) => {
     toast({
       title: "¡Servicio Registrado!",
       description: `Has indicado que deseas operar como: ${service.title.toLowerCase()}. Próximamente podrás configurar los detalles.`,
     });
-    // Lógica futura:
-    // 1. Guardar el servicio seleccionado en el perfil del usuario (e.g., setSelectedService(service.id))
-    // 2. Redirigir a un dashboard o página de configuración específica para ese servicio
-    // if (service.futurePath) {
-    //   router.push(service.futurePath);
-    // }
+    // Future logic: save selected service to user profile, redirect to specific dashboard
     console.log("Usuario ha seleccionado el servicio:", service.id);
   };
 
   return (
-    <ProtectedRoute allowedRoles={['driver']}> {/* Rol 'driver' es la puerta de entrada a la selección de servicios */}
+    <ProtectedRoute allowedRoles={['driver']}>
+      {/* <DriverDashboardClientPart /> */} {/* Example of client component rendering */}
       <div className="container mx-auto px-4 py-12">
         <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-primary tracking-tight sm:text-5xl">
-            Únete a GoLibre Multiservicios
-          </h1>
+          {/* Title "Únete a GoLibre Multiservicios" removed */}
           <p className="mt-4 text-xl text-foreground">
             Elige cómo quieres generar ingresos y conectar con clientes.
           </p>
@@ -99,15 +89,6 @@ export default function ServiceSelectionPage() {
                   {service.description}
                 </CardDescription>
               </CardContent>
-              {/* <CardFooter className="p-6 bg-card">
-                <Button 
-                  variant="outline" 
-                  className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
-                  onClick={(e) => { e.stopPropagation(); handleServiceSelection(service);}} // Evita que el onClick de la Card se dispare dos veces
-                >
-                  Seleccionar y Continuar
-                </Button>
-              </CardFooter> */}
             </Card>
           ))}
         </div>
@@ -115,6 +96,18 @@ export default function ServiceSelectionPage() {
           Más servicios y funcionalidades se añadirán pronto. ¡Estamos construyendo el futuro de los servicios contigo!
         </p>
       </div>
+
+      {/* This is where you could add async server components wrapped in Suspense if needed */}
+      {/* <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+        <Suspense fallback={
+            <Card className="w-full shadow-md">
+              <CardHeader><CardTitle>Loading Ad...</CardTitle></CardHeader>
+              <CardContent><div className="h-24 bg-muted rounded animate-pulse"></div></CardContent>
+            </Card>
+          }>
+          <AdSuggestionDisplay />
+        </Suspense>
+      </div> */}
     </ProtectedRoute>
   );
 }
