@@ -1,14 +1,15 @@
+
 "use client";
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import AuthButton from '@/components/auth-button';
-import LogoIcon from '@/components/icons/logo';
 import { Button } from '@/components/ui/button';
+import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Users, Car } from 'lucide-react'; // Icons for the new buttons
 
 export default function HomePage() {
-  const { user, role, loading, isInitializing } = useAuth();
+  const { user, role, loading, isInitializing, signIn } = useAuth(); // Added signIn
   const router = useRouter();
 
   useEffect(() => {
@@ -35,18 +36,45 @@ export default function HomePage() {
     );
   }
   
-  // This content is primarily for non-logged-in users, as others are redirected.
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-background p-8 text-center">
       <LogoIcon className="w-24 h-24 mb-6 text-primary" />
-      <h1 className="text-5xl font-bold text-primary mb-4">GoLibre</h1>
-      <p className="text-xl text-foreground mb-8">Your Ride, Your Freedom. Drivers ride free!</p>
+      <h1 className="text-5xl font-bold text-primary mb-4">Bienvenido a GoLibre</h1>
+      <p className="text-xl text-foreground mb-6">
+        Conectando pasajeros y conductores. ¡Tu viaje, tu libertad!
+      </p>
+
       {!user ? (
-        <AuthButton />
+        <div className="space-y-6 mt-8 w-full max-w-md">
+          <p className="text-lg font-medium text-foreground">Elige tu experiencia:</p>
+          <div className="grid grid-cols-1 gap-4">
+            <Button 
+              onClick={signIn} 
+              variant="default" 
+              size="lg" 
+              className="w-full py-6 text-lg"
+            >
+              <Users className="mr-3 h-6 w-6" />
+              Entrar como Cliente
+            </Button>
+            <Button 
+              onClick={signIn} 
+              variant="secondary" 
+              size="lg" 
+              className="w-full py-6 text-lg"
+            >
+              <Car className="mr-3 h-6 w-6" />
+              Entrar como Conductor
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Serás redirigido para iniciar sesión con Google. La selección de rol se confirmará después si es necesario.
+          </p>
+        </div>
       ) : !role ? (
         // Fallback if redirect hasn't happened yet or user lands here unexpectedly
         <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
-          Select Your Role
+          Seleccionar Rol
         </Button>
       ) : null}
     </div>
