@@ -6,21 +6,21 @@ import LogoIcon from './icons/logo';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
 import { useRouter } from 'next/navigation';
-import { UserCog } from 'lucide-react'; // Removed Car and UserCircle
+import { UserCog } from 'lucide-react';
 
 export default function Header() {
   const { user, role } = useAuth();
   const router = useRouter();
 
   const getDashboardLink = () => {
-    // Always point to driver dashboard if user is logged in, given the current focus
+    // Always point to driver/service selection dashboard if user is logged in
     if (user) return '/driver/dashboard';
     return '/'; // Fallback for no user
   };
 
   const getHeaderText = () => {
-    // If user is logged in, display "Conductor / GoLibre" due to focus on driver UI
-    if (user) return 'Conductor / GoLibre';
+    // If user is logged in, display "GoLibre"
+    // If not logged in, also display "GoLibre"
     return 'GoLibre';
   };
 
@@ -38,15 +38,15 @@ export default function Header() {
                 <span className="text-sm text-foreground truncate max-w-[100px] sm:max-w-[150px]" title={user.displayName || user.email || "User"}>
                   {user.displayName || user.email}
                 </span>
-                {/* Show 'Conductor' badge if logged in, as customer UI is removed */}
-                <span className="text-xs px-2 py-1 bg-secondary text-secondary-foreground rounded-full hidden md:inline-block">
-                  Conductor
+                {/* Show 'Miles de usuarios forman parte de nosotros' badge if logged in */}
+                <span className="text-xs px-2 py-1 bg-secondary text-secondary-foreground rounded-full hidden md:inline-block whitespace-nowrap">
+                  Miles de usuarios forman parte de nosotros
                 </span>
               </div>
 
-              {/* Always show driver dashboard button if logged in */}
+              {/* Always show multiservice dashboard button if logged in */}
               <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
-                <UserCog className="mr-2 h-4 w-4" /> Panel Conductor
+                <UserCog className="mr-2 h-4 w-4" /> Panel multiservicios
               </Button>
             </>
           )}
