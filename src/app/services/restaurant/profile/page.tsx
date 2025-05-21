@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useState, useEffect, useCallback } from "react";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Image from "next/image";
@@ -23,20 +23,40 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { db, storage } from "@/lib/firebase";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
   location: z.string().min(5, { message: "La ubicación debe tener al menos 5 caracteres." }),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(300, { message: "La descripción no puede exceder los 300 caracteres." }),
-  profileImage: z.any().optional(), // Can be FileList or string (URL)
+  profileImageFile: z.instanceof(FileList).optional(), // For the file input
 });
 
 type RestaurantProfileFormData = z.infer<typeof restaurantProfileSchema>;
 
+interface RestaurantDocument {
+  restaurantName: string;
+  location: string;
+  description: string;
+  imageUrl?: string;
+  ownerId: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export default function RestaurantProfilePage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [imagePreview, setImagePreview] = useState<string | null>("https://placehold.co/128x128.png?text=Logo");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>(undefined);
+
 
   const form = useForm<RestaurantProfileFormData>({
     resolver: zodResolver(restaurantProfileSchema),
@@ -44,11 +64,52 @@ export default function RestaurantProfilePage() {
       restaurantName: "",
       location: "",
       description: "",
-      profileImage: null,
     },
   });
 
-  const { formState: { isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues } = form;
+
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setIsLoadingProfile(false);
+      return;
+    }
+    setIsLoadingProfile(true);
+    try {
+      const profileDocRef = doc(db, "restaurants", user.uid);
+      const docSnap = await getDoc(profileDocRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data() as RestaurantDocument;
+        reset({
+          restaurantName: data.restaurantName,
+          location: data.location,
+          description: data.description,
+        });
+        if (data.imageUrl) {
+          setImagePreview(data.imageUrl);
+          setCurrentImageUrl(data.imageUrl);
+        }
+        setProfileExistsAndLoaded(true);
+      } else {
+        // No profile exists yet, form will be blank
+        setProfileExistsAndLoaded(false); 
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      toast({
+        variant: "destructive",
+        title: "Error al cargar el perfil",
+        description: "No se pudo cargar la información de tu restaurante.",
+      });
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [user, reset, toast]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -59,29 +120,83 @@ export default function RestaurantProfilePage() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      form.setValue('profileImage', event.target.files, { shouldDirty: true });
+      setValue('profileImageFile', event.target.files, { shouldDirty: true });
     } else {
       setImageFile(null);
-      if (!form.getValues("profileImage")) { 
-          setImagePreview("https://placehold.co/128x128.png?text=Logo");
-      }
-      form.setValue('profileImage', null, { shouldDirty: true });
+      // If no file selected, and there's a current image URL, show that. Otherwise, placeholder.
+      setImagePreview(currentImageUrl || "https://placehold.co/128x128.png?text=Logo");
+      setValue('profileImageFile', undefined, { shouldDirty: true });
     }
   };
 
   async function onSubmit(data: RestaurantProfileFormData) {
-    console.log("Restaurant Profile Data:", data);
-    console.log("Image File:", imageFile);
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión para guardar." });
+      return;
+    }
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    let uploadedImageUrl = currentImageUrl; // Keep existing image URL by default
 
-    toast({
-      title: "¡Perfil Guardado!",
-      description: "La información de tu restaurante ha sido guardada exitosamente.",
-    });
+    if (imageFile) { // If a new file was selected for upload
+      const storageRef = ref(storage, `restaurants/${user.uid}/profileImage/${imageFile.name}`);
+      try {
+        const snapshot = await uploadBytes(storageRef, imageFile);
+        uploadedImageUrl = await getDownloadURL(snapshot.ref);
+        setCurrentImageUrl(uploadedImageUrl); // Update current image URL after successful upload
+      } catch (error) {
+        console.error("Error uploading image:", error);
+        toast({
+          variant: "destructive",
+          title: "Error al subir imagen",
+          description: "No se pudo guardar la imagen de perfil.",
+        });
+        return; // Stop submission if image upload fails
+      }
+    }
     
-    const submittedDataWithImage = { ...data, profileImage: imageFile ? data.profileImage : null };
-    form.reset(submittedDataWithImage); 
+    const restaurantDocRef = doc(db, "restaurants", user.uid);
+    const profileDataToSave = {
+      ownerId: user.uid,
+      restaurantName: data.restaurantName,
+      location: data.location,
+      description: data.description,
+      imageUrl: uploadedImageUrl, // This will be undefined if no image was ever set and no new one uploaded
+      updatedAt: serverTimestamp(),
+    };
+
+    try {
+      // Check if doc exists to set createdAt only once
+      const docSnap = await getDoc(restaurantDocRef);
+      if (!docSnap.exists()) {
+        (profileDataToSave as any).createdAt = serverTimestamp();
+      }
+
+      await setDoc(restaurantDocRef, profileDataToSave, { merge: true }); // Merge to avoid overwriting createdAt
+
+      toast({
+        title: "¡Perfil Guardado!",
+        description: "La información de tu restaurante ha sido guardada exitosamente.",
+      });
+      
+      // Reset form with new data to make it not dirty
+      reset({ 
+        restaurantName: data.restaurantName,
+        location: data.location,
+        description: data.description,
+        profileImageFile: undefined // Clear the file input state
+      });
+      setImageFile(null); // Clear the image file state
+      if(uploadedImageUrl) setImagePreview(uploadedImageUrl); // Update preview with potentially new URL
+      setProfileExistsAndLoaded(true); // Ensure "Mis Platos" shows
+      
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: "No se pudo guardar la información del restaurante.",
+      });
+    }
   }
 
   const handleAddDish = () => {
@@ -103,8 +218,37 @@ export default function RestaurantProfilePage() {
     ButtonIcon = Check;
   }
 
+  if (isLoadingProfile) {
+    return (
+      <ProtectedRoute allowedRoles={['driver']}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto space-y-6">
+            <Card className="w-full shadow-xl">
+              <CardHeader>
+                <Skeleton className="h-8 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col items-center">
+                  <Skeleton className="h-32 w-32 rounded-full" />
+                  <Skeleton className="h-4 w-1/3 mt-2" />
+                </div>
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+              <CardFooter>
+                <Skeleton className="h-12 w-full" />
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
   return (
-    <ProtectedRoute allowedRoles={['driver']}> {/* Assuming 'driver' role allows access to service setup */}
+    <ProtectedRoute allowedRoles={['driver']}>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
           <Card className="w-full shadow-xl">
@@ -121,9 +265,9 @@ export default function RestaurantProfilePage() {
               <form onSubmit={form.handleSubmit(onSubmit)}>
                 <CardContent className="space-y-6">
                   <FormField
-                    control={form.control}
-                    name="profileImage"
-                    render={({ field }) => ( 
+                    control={control}
+                    name="profileImageFile"
+                    render={({ fieldState: imageFieldState }) => ( 
                       <FormItem className="flex flex-col items-center">
                         <FormLabel htmlFor="profile-image-upload" className="cursor-pointer">
                           <Avatar className="h-32 w-32 border-2 border-primary/50 hover:border-primary transition-colors">
@@ -139,20 +283,20 @@ export default function RestaurantProfilePage() {
                             type="file"
                             accept="image/png, image/jpeg, image/webp"
                             className="sr-only" 
-                            onChange={handleImageChange} 
-                            ref={field.ref} 
+                            onChange={handleImageChange}
+                            // No 'ref' or 'value' needed here directly from field, onChange handles it
                           />
                         </FormControl>
                         <FormDescription className="mt-2 text-center">
                           Haz clic en la imagen para subir o cambiar el logo (PNG, JPG, WEBP).
                         </FormDescription>
-                        <FormMessage />
+                        {imageFieldState.error && <FormMessage>{imageFieldState.error.message}</FormMessage>}
                       </FormItem>
                     )}
                   />
 
                   <FormField
-                    control={form.control}
+                    control={control}
                     name="restaurantName"
                     render={({ field }) => (
                       <FormItem>
@@ -166,7 +310,7 @@ export default function RestaurantProfilePage() {
                   />
 
                   <FormField
-                    control={form.control}
+                    control={control}
                     name="location"
                     render={({ field }) => (
                       <FormItem>
@@ -183,7 +327,7 @@ export default function RestaurantProfilePage() {
                   />
 
                   <FormField
-                    control={form.control}
+                    control={control}
                     name="description"
                     render={({ field }) => (
                       <FormItem>
@@ -208,7 +352,7 @@ export default function RestaurantProfilePage() {
                     type="submit" 
                     className="w-full text-lg py-6" 
                     size="lg" 
-                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty)}
+                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty && !imageFile) || !user}
                   >
                     <ButtonIcon className={`mr-2 h-5 w-5 ${isSubmitting ? 'animate-spin' : ''}`}/>
                     {buttonText}
@@ -218,7 +362,7 @@ export default function RestaurantProfilePage() {
             </Form>
           </Card>
 
-          {isSubmitSuccessful && (
+          {profileExistsAndLoaded && (
             <Card className="w-full shadow-xl mt-8">
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-2">
