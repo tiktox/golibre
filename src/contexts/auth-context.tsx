@@ -42,10 +42,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const router = useRouter();
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
+
+  const setAndStoreRole = useCallback((newRole: UserRole, userId?: string) => {
+    const currentUserId = userId || user?.uid;
+    setRoleState(newRole);
+    if (currentUserId && newRole) {
+      try {
+        localStorage.setItem('golibre-role-' + currentUserId, newRole);
+      } catch (error) {
+        console.error("Error writing role to localStorage", error);
+      }
+    } else if (currentUserId && !newRole) {
+      try {
+        localStorage.removeItem('golibre-role-' + currentUserId);
+      } catch (error) {
+        console.error("Error removing role from localStorage", error);
+      }
+    }
+  }, [user?.uid]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      setLoading(true);
       if (firebaseUser) {
         const appUser: User = {
           uid: firebaseUser.uid,
@@ -59,15 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (storedRole) {
             setRoleState(storedRole);
           } else {
-            setRoleState(null); 
+            // New user or role wiped, default to customer
+            setAndStoreRole('customer', firebaseUser.uid);
           }
         } catch (error) {
           console.error("Error reading role from localStorage", error);
-          setRoleState(null);
+          setAndStoreRole('customer', firebaseUser.uid); // Default to customer on error
         }
       } else {
         setUser(null);
         setRoleState(null);
+        // No need to remove general 'golibre-role' anymore, it's user-specific
       }
       if (isInitializing) {
         setIsInitializing(false);
@@ -75,29 +96,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false); 
     });
 
+    // Fallback for initial load if onAuthStateChanged is slow
     if (!auth.currentUser && isInitializing) {
-         try {
-            const storedRole = localStorage.getItem('golibre-role'); 
-            if (storedRole) setRoleState(storedRole as UserRole);
-        } catch (error) {
-            console.error("Error reading initial role from localStorage", error);
-        }
         setIsInitializing(false);
+        setLoading(false);
     }
     return () => unsubscribe();
-  }, [isInitializing]);
+  }, [isInitializing, setAndStoreRole]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // User state will be set by onAuthStateChanged
-      // Redirection will be handled by useEffect in pages based on user/role state
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
+      // onAuthStateChanged will handle user and role state update
+      // Redirection will be handled by useEffect in pages based on user/role state.
     } catch (error: any) {
       console.error("Firebase Sign-In Error:", error);
       toast({ variant: "destructive", title: "Error de inicio de sesión", description: error.message });
-      setLoading(false);
+      setLoading(false); // Ensure loading is false on error
     }
     // setLoading(false) will be effectively handled by onAuthStateChanged or error catch
   }, [toast]);
@@ -106,29 +123,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      if (userCredential.user && displayName) {
-        await updateProfile(userCredential.user, { displayName });
-         // Manually update user state here as onAuthStateChanged might be slow or not pick up displayName immediately
-        setUser(prevUser => prevUser ? { ...prevUser, displayName } : null);
+      if (userCredential.user) {
+        if (displayName) {
+          await updateProfile(userCredential.user, { displayName });
+           // Manually update user state for immediate display name update
+           setUser({ 
+            uid: userCredential.user.uid, 
+            displayName, 
+            email: userCredential.user.email, 
+            photoURL: userCredential.user.photoURL 
+          });
+        }
+        // Default new users to customer
+        setAndStoreRole('customer', userCredential.user.uid);
+        toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
+        // Redirection to customer dashboard will be handled by useEffect in pages.
       }
-      // User state will be set by onAuthStateChanged for other properties
-      toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
-      // Redirection to role-selection will be handled by useEffect in pages
     } catch (error: any) {
       console.error("Firebase Sign-Up Error:", error);
       toast({ variant: "destructive", title: "Error de registro", description: error.message });
-      setLoading(false);
+      setLoading(false); // Ensure loading is false on error
     }
     // setLoading(false) will be effectively handled by onAuthStateChanged or error catch
-  }, [toast]);
+  }, [toast, setAndStoreRole]);
 
   const signOut = useCallback(async () => {
     setLoading(true);
     try {
+      // No need to explicitly remove user-specific role from localStorage here,
+      // as onAuthStateChanged will set user to null, and subsequent logins will re-evaluate role.
       await firebaseSignOut(auth);
-      if(user) { // Clear role for the specific user that signed out
-        localStorage.removeItem('golibre-role-' + user.uid);
-      }
       router.push('/');
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
     } catch (error: any) {
@@ -136,40 +160,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast({ variant: "destructive", title: "Error al cerrar sesión", description: error.message });
     }
     setLoading(false);
-  }, [router, toast, user]);
+  }, [router, toast]);
 
   const setRole = useCallback((newRole: UserRole) => {
     setLoading(true);
-    setRoleState(newRole);
-    if (user && newRole) { 
-      try {
-        localStorage.setItem('golibre-role-' + user.uid, newRole);
-      } catch (error) {
-        console.error("Error writing role to localStorage", error);
-      }
-    } else if (user && !newRole) { 
-        try {
-            localStorage.removeItem('golibre-role-' + user.uid);
-        } catch (error) {
-            console.error("Error removing role from localStorage", error);
-        }
+    if (user) {
+      setAndStoreRole(newRole, user.uid);
+    } else {
+      setRoleState(newRole); // For cases where user might not be set yet
     }
 
-    if (newRole) {
+    if (newRole && user) { // Only redirect if user is definite
       if (newRole === 'customer') {
         router.push('/customer/request-trip');
       } else if (newRole === 'driver') {
         router.push('/driver/dashboard');
       }
-    } else { 
-      if (user) {
-        router.push('/role-selection');
-      } else {
-        router.push('/');
-      }
+    } else if (!newRole && user) { // User exists but role is being cleared (e.g. manual admin action)
+      // This case should no longer lead to /role-selection.
+      // It's an edge case, perhaps redirect to home.
+       router.push('/');
+    } else if (!user) { // No user, go to auth/home
+      router.push('/');
     }
     setLoading(false);
-  }, [router, user]);
+  }, [router, user, setAndStoreRole]);
 
   return (
     <AuthContext.Provider value={{ user, role, loading, isInitializing, signIn, signUp, signOut, setRole }}>

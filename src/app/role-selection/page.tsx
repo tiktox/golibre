@@ -1,76 +1,49 @@
+
 "use client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/contexts/auth-context";
-import { Users, ShieldCheck, Car } from "lucide-react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import ProtectedRoute from "@/components/protected-route";
-
+import { useAuth } from "@/contexts/auth-context";
+import LogoIcon from '@/components/icons/logo';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function RoleSelectionPage() {
-  const { setRole, user, role, loading, isInitializing } = useAuth();
+  const { user, role, loading, isInitializing, setRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if(!isInitializing && !loading) {
-      if (!user) {
-        router.replace('/'); // If not logged in, go to home/login
-      } else if (user && role) {
-        // If role already set, redirect to appropriate dashboard
-        if (role === 'customer') router.replace('/customer/request-trip');
-        if (role === 'driver') router.replace('/driver/dashboard');
-      }
+    if (isInitializing || loading) {
+      return; // Wait until auth state is confirmed
     }
-  }, [user, role, loading, isInitializing, router]);
 
+    if (!user) {
+      router.replace('/auth'); // If not logged in, go to auth page
+      return;
+    }
 
-  if (isInitializing || loading) {
-     return <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))]">Loading role selection...</div>;
-  }
+    if (role) { // If role is already set, redirect to appropriate dashboard
+      if (role === 'customer') router.replace('/customer/request-trip');
+      else if (role === 'driver') router.replace('/driver/dashboard');
+      else router.replace('/'); // Fallback
+      return;
+    }
 
-  if (!user) {
-    // This case should be handled by redirect, but as a fallback UI:
-    return <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))]">Redirecting to login...</div>;
-  }
-  
-  if (user && role) {
-    // This case should be handled by redirect, but as a fallback UI:
-    return <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))]">Redirecting to dashboard...</div>;
-  }
+    // If user is logged in but has no role (should be a transient state or an edge case)
+    // Automatically set role to 'customer' and let AuthContext handle redirection.
+    if (user && !role) {
+      setRole('customer');
+    }
+  }, [user, role, loading, isInitializing, router, setRole]);
 
-
+  // This page should ideally not be visible for long, as it will redirect.
+  // Show a generic loading/redirecting state.
   return (
-    <ProtectedRoute allowedRoles={null}> {/* null means any authenticated user without a role */}
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/30 p-4 sm:p-8">
-        <Card className="w-full max-w-md shadow-xl">
-          <CardHeader className="text-center">
-            <Users className="mx-auto h-12 w-12 text-primary mb-4" />
-            <CardTitle className="text-3xl font-bold">Select Your Role</CardTitle>
-            <CardDescription className="text-md">
-              Choose how you want to use GoLibre. You can change this later if needed (feature not implemented).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Button 
-              onClick={() => setRole('customer')} 
-              className="w-full text-lg py-6 bg-primary hover:bg-primary/90 text-primary-foreground"
-              size="lg"
-            >
-              <Car className="mr-3 h-6 w-6" />
-              I'm a Customer
-            </Button>
-            <Button 
-              onClick={() => setRole('driver')} 
-              className="w-full text-lg py-6 bg-accent hover:bg-accent/90 text-accent-foreground"
-              size="lg"
-            >
-              <ShieldCheck className="mr-3 h-6 w-6" />
-              I'm a Driver Partner
-            </Button>
-          </CardContent>
-        </Card>
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] p-4">
+      <LogoIcon className="w-16 h-16 mb-4 text-primary animate-pulse" />
+      <p className="text-lg text-muted-foreground mb-2">Configurando tu cuenta...</p>
+      <div className="space-y-2 w-full max-w-sm">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-3/4" />
       </div>
-    </ProtectedRoute>
+    </div>
   );
 }

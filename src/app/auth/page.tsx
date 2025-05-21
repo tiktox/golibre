@@ -47,10 +47,13 @@ export default function AuthPage() {
 
   useEffect(() => {
      if (!isInitializing && !authLoading) {
-      if (user && role) {
+      if (user && role) { // If user has role, redirect to dashboard
         router.replace(role === 'customer' ? '/customer/request-trip' : '/driver/dashboard');
-      } else if (user && !role) {
-        router.replace('/role-selection');
+      } else if (user && !role) { 
+        // User is logged in, but role might not be set yet by AuthContext (transient)
+        // AuthContext will default to 'customer' and handle redirection.
+        // As a fallback, or if AuthContext is slow, this will push to customer dashboard.
+        router.replace('/customer/request-trip');
       }
     }
   }, [user, role, authLoading, isInitializing, router]);
@@ -72,7 +75,7 @@ export default function AuthPage() {
 
   const handleSignUp = async (data: SignUpFormData) => {
     await signUp(data.email, data.password, data.displayName);
-    // Redirection handled by useEffect
+    // Redirection handled by useEffect (AuthContext sets role to customer, then this useEffect redirects)
   };
   
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
@@ -86,7 +89,6 @@ export default function AuthPage() {
       </div>
     );
   }
-
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/20 p-4 sm:p-8">

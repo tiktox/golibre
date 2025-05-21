@@ -1,3 +1,4 @@
+
 "use client";
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
@@ -17,7 +18,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading, isInitializing } = useAuth();
+  const { user, role, loading, isInitializing, setRole } = useAuth(); // Added setRole
   const router = useRouter();
   const pathname = usePathname();
 
@@ -25,23 +26,29 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     if (isInitializing || loading) return; // Wait for auth state to be fully loaded
 
     if (!user) {
-      router.replace(`/?redirect=${pathname}`); // Redirect to login if not authenticated
+      router.replace(`/auth?redirect=${pathname}`); // Redirect to auth page if not authenticated
       return;
     }
 
-    if (allowedRoles === null) { // For pages like role selection
-      if (role) { // If role is already set, redirect away from role selection
+    // Handling for pages like /role-selection (which is now a state-fixer)
+    if (allowedRoles === null) { 
+      if (role) { // If role is already set, redirect away from role selection-like pages
         if (role === 'customer') router.replace('/customer/request-trip');
         else if (role === 'driver') router.replace('/driver/dashboard');
         else router.replace('/'); 
       }
-      // If no role, user should be on this page (e.g. /role-selection), so no redirect.
+      // If no role, user should be on the role-selection page, which will call setRole('customer')
       return;
     }
     
     // For role-specific pages
-    if (!role) { // If authenticated but no role, and not on a page allowing this (allowedRoles !== null)
-      router.replace('/role-selection');
+    if (!role) { 
+      // Authenticated but no role. AuthContext should set 'customer' by default.
+      // If this state persists, it's an edge case.
+      // Attempt to set to customer, or redirect to home as a fallback.
+      // The RoleSelectionPage or AuthContext's onAuthStateChanged should typically handle this.
+      // Forcing a role here might be too aggressive; redirecting allows other mechanisms to fix state.
+      router.replace('/'); // Redirect to home, expecting AuthContext to resolve role or user to re-navigate.
       return;
     }
 
@@ -53,13 +60,13 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
       return;
     }
 
-  }, [user, role, loading, isInitializing, router, allowedRoles, pathname]);
+  }, [user, role, loading, isInitializing, router, allowedRoles, pathname, setRole]);
 
   // Conditions for showing loading/skeleton
-  const showLoading = isInitializing || loading || !user || 
-                      (allowedRoles === null && role) || // waiting for redirect from role-selection if role is set
-                      (allowedRoles !== null && !role) || // waiting for redirect to role-selection
-                      (allowedRoles && allowedRoles.length > 0 && role && !allowedRoles.includes(role)); // waiting for redirect due to wrong role
+  const showLoading = isInitializing || loading || !user ||
+                      (allowedRoles === null && !!role) || // On role-selection page but role already set (waiting for redirect)
+                      (allowedRoles !== null && !role && user); // On role-specific page, user exists, but role not yet (transient, waiting for redirect/role set)
+                     
 
   if (showLoading) {
     return (
