@@ -2,12 +2,11 @@
 "use client";
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
-import { LogIn, LogOut, Loader2, UserPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { LogOut, Loader2 } from 'lucide-react'; // Removed UserPlus and router as they are no longer needed here when user is not logged in.
 
 export default function AuthButton() {
   const { user, signOut, loading } = useAuth();
-  const router = useRouter();
+  // const router = useRouter(); // No longer needed if we don't redirect from here
 
   if (loading) {
     return (
@@ -27,10 +26,6 @@ export default function AuthButton() {
     );
   }
 
-  return (
-    <Button onClick={() => router.push('/auth')} variant="default" size="sm">
-      <UserPlus className="mr-2 h-4 w-4" />
-      Unirme a GoLibre
-    </Button>
-  );
+  // If user is not logged in, render nothing (button removed as requested)
+  return null;
 }
