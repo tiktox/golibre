@@ -8,7 +8,7 @@ export default function LogoIcon(props: SVGProps<SVGSVGElement>) {
 
   return (
     <Image
-      src="https://ik.imagekit.io/lics6cm47/logo%20fondo%20blanco.png?updatedAt=1747853488495"
+      src="https://ik.imagekit.io/lics6cm47/png%20original.png?updatedAt=1747853865553"
       alt="GoLibre Logo"
       width={width}
       height={height}
