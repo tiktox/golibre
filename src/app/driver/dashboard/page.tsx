@@ -1,36 +1,22 @@
-"use client"; // Top-level page can be client for state like availability
+
+// No "use client" - this is now a Server Component
 import AdSuggestionDisplay from "@/components/driver/ad-suggestion-display";
 import RideRequestActions from "@/components/driver/ride-request-actions";
 import ProtectedRoute from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { useState, Suspense } from "react";
+import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import DriverDashboardClientPart from "@/components/driver/driver-dashboard-client-part";
 
 export default function DriverDashboardPage() {
-  const [isAvailable, setIsAvailable] = useState(true);
-
   return (
     <ProtectedRoute allowedRoles={['driver']}>
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-4 sm:mb-0">Driver Dashboard</h1>
-          <div className="flex items-center space-x-2 p-3 bg-card rounded-lg shadow">
-            <Switch
-              id="availability-toggle"
-              checked={isAvailable}
-              onCheckedChange={setIsAvailable}
-              aria-label="Toggle availability"
-            />
-            <Label htmlFor="availability-toggle" className={`text-lg font-medium ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
-              {isAvailable ? "Available for Rides" : "Unavailable"}
-            </Label>
-          </div>
-        </div>
+        {/* Client-specific parts like header and toggle are in DriverDashboardClientPart */}
+        <DriverDashboardClientPart />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8"> {/* Added mt-8 for spacing after header part */}
           <div className="lg:col-span-2">
             <Card className="h-full">
               <CardHeader>
@@ -52,7 +38,7 @@ export default function DriverDashboardPage() {
                   </CardContent>
                 </Card>
               }>
-              <AdSuggestionDisplay />
+              <AdSuggestionDisplay /> {/* AdSuggestionDisplay is now rendered by a Server Component */}
             </Suspense>
             {/* Future: Earnings summary, etc. */}
           </div>
