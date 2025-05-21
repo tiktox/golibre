@@ -1,3 +1,4 @@
+
 import type { SVGProps } from 'react';
 
 export default function LogoIcon(props: SVGProps<SVGSVGElement>) {
@@ -14,24 +15,29 @@ export default function LogoIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 100 100" // Adjusted viewBox for a square aspect ratio
+      viewBox="0 0 100 100"
       width={width}
       height={height}
       className={className}
       {...restProps}
     >
       <title>GoLibre Logo</title>
-      {/* Optional: Add a simple background shape if desired */}
-      {/* <rect width="100" height="100" rx="10" fill="hsl(var(--primary))" /> */}
+      {/* Black background */}
+      <rect width="100" height="100" rx="20" fill="black" />
+
+      {/* Decorative ring using primary color */}
+      <circle cx="50" cy="50" r="32" fill="none" stroke="hsl(var(--primary))" strokeWidth="4" />
+
+      {/* GL Text */}
       <text
         x="50%"
         y="50%"
         dominantBaseline="middle"
         textAnchor="middle"
-        fontSize="50" // Adjust font size as needed
+        fontSize="40" 
         fontWeight="bold"
-        fill="hsl(var(--primary-foreground))" // Use primary foreground for text on primary background, or primary for text on light background
-        className="fill-primary group-hover:fill-primary/80" // Tailwind class for primary color, adjustable
+        fill="white"
+        fontFamily="Arial, Helvetica, sans-serif"
       >
         GL
       </text>
