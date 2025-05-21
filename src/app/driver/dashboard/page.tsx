@@ -16,6 +16,7 @@ interface ServiceOption {
   title: string;
   description: string;
   icon: React.ElementType;
+  path?: string; // Optional path to navigate to
 }
 
 const serviceOptions: ServiceOption[] = [
@@ -24,6 +25,7 @@ const serviceOptions: ServiceOption[] = [
     title: "Soy un Restaurante",
     description: "Ofrece tus deliciosos platos y expande tu alcance a más clientes.",
     icon: UtensilsCrossed,
+    path: "/services/restaurant/profile", // Path to the new restaurant profile page
   },
   {
     id: "delivery",
@@ -51,11 +53,16 @@ export default function ServiceSelectionPage() {
 
   const handleServiceSelection = (service: ServiceOption) => {
     toast({
-      title: "¡Servicio Registrado!",
-      description: `Has indicado que deseas operar como: ${service.title.toLowerCase()}. Próximamente podrás configurar los detalles.`,
+      title: "¡Servicio Seleccionado!",
+      description: `Has indicado que deseas operar como: ${service.title.toLowerCase()}.`,
     });
-    // Future logic: save selected service to user profile, redirect to specific dashboard
-    console.log("Usuario ha seleccionado el servicio:", service.id);
+    
+    if (service.path) {
+      router.push(service.path);
+    } else {
+      // Future logic: save selected service to user profile, redirect to specific dashboard
+      console.log("Usuario ha seleccionado el servicio (sin ruta específica):", service.id);
+    }
   };
 
   return (
