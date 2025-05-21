@@ -25,7 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, type Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -33,7 +33,7 @@ const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
   location: z.string().min(5, { message: "La ubicación debe tener al menos 5 caracteres." }),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(300, { message: "La descripción no puede exceder los 300 caracteres." }),
-  profileImageFile: z.instanceof(FileList).optional(), // For the file input
+  profileImageFile: z.any().optional(), // For the file input - Changed from z.instanceof(FileList)
 });
 
 type RestaurantProfileFormData = z.infer<typeof restaurantProfileSchema>;
@@ -155,7 +155,7 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const profileDataToSave = {
+    const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any } = {
       ownerId: user.uid,
       restaurantName: data.restaurantName,
       location: data.location,
@@ -168,7 +168,7 @@ export default function RestaurantProfilePage() {
       // Check if doc exists to set createdAt only once
       const docSnap = await getDoc(restaurantDocRef);
       if (!docSnap.exists()) {
-        (profileDataToSave as any).createdAt = serverTimestamp();
+        profileDataToSave.createdAt = serverTimestamp();
       }
 
       await setDoc(restaurantDocRef, profileDataToSave, { merge: true }); // Merge to avoid overwriting createdAt
@@ -389,3 +389,6 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
+
+
+    
