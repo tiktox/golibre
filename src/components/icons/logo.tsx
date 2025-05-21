@@ -8,7 +8,7 @@ export default function LogoIcon(props: SVGProps<SVGSVGElement>) {
 
   return (
     <Image
-      src="https://ik.imagekit.io/lics6cm47/httpstiktox.github.ioKGBKitchen%20(1).png?updatedAt=1747840090066"
+      src="https://res-console.cloudinary.com/da88jmkuk/thumbnails/v1/image/upload/v1747852641/U2luX2ZvbmRvX2NpMGM5NQ==/drilldown"
       alt="GoLibre Logo"
       width={width}
       height={height}
