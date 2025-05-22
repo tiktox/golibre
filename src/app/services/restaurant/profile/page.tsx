@@ -29,6 +29,7 @@ import { doc, setDoc, getDoc, serverTimestamp, type Timestamp } from "firebase/f
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import AddDishForm from "@/components/services/restaurant/add-dish-form"; // New import
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
@@ -60,6 +61,7 @@ export default function RestaurantProfilePage() {
   const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
+  const [isAddDishModalOpen, setIsAddDishModalOpen] = useState(false); // State for Add Dish Modal
 
   const form = useForm<RestaurantProfileFormData>({
     resolver: zodResolver(restaurantProfileSchema),
@@ -165,7 +167,7 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome; 
+    const imageUrlForFirestore = uploadedImageUrlOutcome;
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -216,13 +218,21 @@ export default function RestaurantProfilePage() {
     }
   }
 
-  const handleAddDish = () => {
-    console.log("Añadir plato clicked");
-    toast({
-      title: "Funcionalidad Próximamente",
-      description: "Pronto podrás añadir y gestionar los platos de tu menú aquí.",
-    });
+  const handleOpenAddDishModal = () => {
+    setIsAddDishModalOpen(true);
   };
+
+  // This function will be called when a dish is successfully "added" from the modal
+  const handleDishAdded = (dishData: any) => { // Use 'any' for now, will be DishFormData type
+    console.log("Nuevo plato añadido:", dishData);
+    toast({
+      title: "¡Plato Añadido (Simulado)!",
+      description: `El plato "${dishData.title}" ha sido registrado.`,
+    });
+    setIsAddDishModalOpen(false); // Close the modal
+    // Here you would typically re-fetch dishes or update local state
+  };
+
 
   let buttonText = "Guardar Cambios";
   let ButtonIcon = Save;
@@ -283,7 +293,7 @@ export default function RestaurantProfilePage() {
                       <FormItem className="flex flex-col items-center">
                         <FormLabel htmlFor="profile-image-upload" className="cursor-pointer">
                           <Avatar className="h-32 w-32 border-2 border-primary/50 hover:border-primary transition-colors">
-                            <AvatarImage src={imagePreview || undefined} alt="Logo del Restaurante" data-ai-hint="restaurant logo" />
+                            <AvatarImage src={imagePreview || undefined} alt="Logo del Restaurante" data-ai-hint="restaurant logo"/>
                             <AvatarFallback>
                               <Camera className="h-12 w-12 text-muted-foreground" />
                             </AvatarFallback>
@@ -391,7 +401,7 @@ export default function RestaurantProfilePage() {
               </Button>
               <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-6 sm:gap-8">
                 <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-md shrink-0">
-                  <AvatarImage src={imagePreview || DEFAULT_PLACEHOLDER_IMAGE} alt={getValues("restaurantName")} data-ai-hint="restaurant logo" />
+                  <AvatarImage src={imagePreview || DEFAULT_PLACEHOLDER_IMAGE} alt={getValues("restaurantName")} data-ai-hint="restaurant logo"/>
                   <AvatarFallback className="text-4xl"><Building /></AvatarFallback>
                 </Avatar>
                 <div className="flex-grow">
@@ -423,7 +433,7 @@ export default function RestaurantProfilePage() {
             {/* Dishes Grid Section */}
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                {[].map((dish: any, i: number) => ( // Empty array here
+                {[].map((dish: any, i: number) => ( 
                   <Card key={i} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col">
                     <div className="aspect-[4/3] w-full overflow-hidden">
                       <Image
@@ -450,7 +460,7 @@ export default function RestaurantProfilePage() {
               variant="default"
               size="lg" 
               className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
-              onClick={handleAddDish}
+              onClick={handleOpenAddDishModal}
               aria-label="Añadir Plato"
             >
               <Plus className="h-7 w-7" />
@@ -476,8 +486,11 @@ export default function RestaurantProfilePage() {
            </div>
         )}
       </div>
+      <AddDishForm 
+        isOpen={isAddDishModalOpen} 
+        onOpenChange={setIsAddDishModalOpen}
+        onDishAdd={handleDishAdded}
+      />
     </ProtectedRoute>
   );
 }
-
-    
