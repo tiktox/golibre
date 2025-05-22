@@ -22,12 +22,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp, type Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
@@ -42,7 +43,7 @@ interface RestaurantDocument {
   restaurantName: string;
   location: string;
   description: string;
-  imageUrl?: string | null; // Allow null for Firestore compatibility
+  imageUrl?: string | null;
   ownerId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -56,7 +57,7 @@ export default function RestaurantProfilePage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null | undefined>(undefined);
-
+  const [isEditing, setIsEditing] = useState(false);
 
   const form = useForm<RestaurantProfileFormData>({
     resolver: zodResolver(restaurantProfileSchema),
@@ -72,6 +73,7 @@ export default function RestaurantProfilePage() {
   const fetchProfile = useCallback(async () => {
     if (!user) {
       setIsLoadingProfile(false);
+      setIsEditing(true); // No user, force edit mode (though saving will be disabled)
       return;
     }
     setIsLoadingProfile(true);
@@ -86,18 +88,20 @@ export default function RestaurantProfilePage() {
           location: data.location,
           description: data.description,
         });
-        if (data.imageUrl) { // Handles string URL, null will be falsy
+        if (data.imageUrl) {
           setImagePreview(data.imageUrl);
           setCurrentImageUrl(data.imageUrl);
         } else {
           setImagePreview("https://placehold.co/128x128.png?text=Logo");
-          setCurrentImageUrl(null); // Explicitly set to null if no image URL from DB
+          setCurrentImageUrl(null);
         }
         setProfileExistsAndLoaded(true);
+        setIsEditing(false); // Default to display mode if profile exists
       } else {
         setProfileExistsAndLoaded(false);
         setImagePreview("https://placehold.co/128x128.png?text=Logo");
-        setCurrentImageUrl(undefined); // No profile, so no current image
+        setCurrentImageUrl(undefined);
+        setIsEditing(true); // No profile, force edit mode
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -106,6 +110,7 @@ export default function RestaurantProfilePage() {
         title: "Error al cargar el perfil",
         description: "No se pudo cargar la información de tu restaurante.",
       });
+      setIsEditing(true); // Fallback to edit mode on error
     } finally {
       setIsLoadingProfile(false);
     }
@@ -114,6 +119,7 @@ export default function RestaurantProfilePage() {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -157,7 +163,6 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    // Ensure imageUrl is null if undefined, otherwise use the string URL
     const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
@@ -190,13 +195,14 @@ export default function RestaurantProfilePage() {
       });
       setImageFile(null);
       
-      setCurrentImageUrl(imageUrlForFirestore); // Update currentImageUrl state
+      setCurrentImageUrl(imageUrlForFirestore);
       if (imageUrlForFirestore) {
         setImagePreview(imageUrlForFirestore);
       } else {
         setImagePreview("https://placehold.co/128x128.png?text=Logo");
       }
       setProfileExistsAndLoaded(true);
+      setIsEditing(false); // Switch to display mode after successful save
       
     } catch (error: any) {
       console.error("Error saving profile:", error);
@@ -222,9 +228,11 @@ export default function RestaurantProfilePage() {
   if (isSubmitting) {
     buttonText = "Guardando...";
     ButtonIcon = Loader2;
-  } else if (isSubmitSuccessful && !isDirty && !imageFile) { // Added !imageFile to condition
+  } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded) {
     buttonText = "Cambios Guardados";
     ButtonIcon = Check;
+  } else if (!profileExistsAndLoaded && !isDirty) {
+    buttonText = "Crear Perfil";
   }
 
 
@@ -233,24 +241,15 @@ export default function RestaurantProfilePage() {
       <ProtectedRoute allowedRoles={['driver']}>
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto space-y-6">
-            <Card className="w-full shadow-xl">
-              <CardHeader>
-                <Skeleton className="h-8 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex flex-col items-center">
-                  <Skeleton className="h-32 w-32 rounded-full" />
-                  <Skeleton className="h-4 w-1/3 mt-2" />
-                </div>
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-20 w-full" />
-              </CardContent>
-              <CardFooter>
-                <Skeleton className="h-12 w-full" />
-              </CardFooter>
-            </Card>
+            <Skeleton className="h-8 w-3/4 mb-2" />
+            <Skeleton className="h-4 w-1/2 mb-6" />
+            <div className="flex flex-col items-center mb-6">
+              <Skeleton className="h-32 w-32 rounded-full" />
+            </div>
+            <Skeleton className="h-10 w-full mb-4" />
+            <Skeleton className="h-10 w-full mb-4" />
+            <Skeleton className="h-20 w-full mb-6" />
+            <Skeleton className="h-12 w-full" />
           </div>
         </div>
       </ProtectedRoute>
@@ -260,12 +259,13 @@ export default function RestaurantProfilePage() {
   return (
     <ProtectedRoute allowedRoles={['driver']}>
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <Card className="w-full shadow-xl">
+        {isEditing ? (
+          // EDITING VIEW
+          <Card className="w-full max-w-2xl mx-auto shadow-xl">
             <CardHeader>
               <CardTitle className="text-2xl flex items-center gap-2">
                 <Building className="h-6 w-6 text-primary" />
-                Configura el Perfil de tu Restaurante
+                {profileExistsAndLoaded ? "Editar Perfil del Restaurante" : "Configura el Perfil de tu Restaurante"}
               </CardTitle>
               <CardDescription>
                 Completa los detalles para que los clientes puedan encontrarte y conocerte.
@@ -303,8 +303,7 @@ export default function RestaurantProfilePage() {
                       </FormItem>
                     )}
                   />
-
-                  <FormField
+                   <FormField
                     control={control}
                     name="restaurantName"
                     render={({ field }) => (
@@ -317,7 +316,6 @@ export default function RestaurantProfilePage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={control}
                     name="location"
@@ -334,7 +332,6 @@ export default function RestaurantProfilePage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={control}
                     name="description"
@@ -356,12 +353,19 @@ export default function RestaurantProfilePage() {
                     )}
                   />
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col sm:flex-row gap-2 justify-end">
+                  {profileExistsAndLoaded && ( // Show cancel only if a profile already exists and we are editing it
+                    <Button type="button" variant="outline" onClick={() => {
+                      setIsEditing(false);
+                      fetchProfile(); // Resets form to last saved state if user cancels
+                    }}>
+                      Cancelar
+                    </Button>
+                  )}
                   <Button 
                     type="submit" 
-                    className="w-full text-lg py-6" 
-                    size="lg" 
-                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty && !imageFile) || !user}
+                    className="sm:w-auto w-full" 
+                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded) || !user}
                   >
                     <ButtonIcon className={`mr-2 h-5 w-5 ${isSubmitting ? 'animate-spin' : ''}`}/>
                     {buttonText}
@@ -370,31 +374,119 @@ export default function RestaurantProfilePage() {
               </form>
             </Form>
           </Card>
+        ) : profileExistsAndLoaded ? (
+          // DISPLAY VIEW (Only if profile exists and not editing)
+          <div className="w-full max-w-5xl mx-auto">
+            {/* Profile Header Section */}
+            <div className="bg-muted/70 dark:bg-muted/40 p-6 md:p-8 rounded-xl shadow-lg mb-10 relative">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+                className="absolute top-4 right-4 bg-background hover:bg-accent/10 border-primary/30 text-primary hover:text-accent"
+              >
+                <Edit3 className="mr-1.5 h-4 w-4" /> Editar Perfil
+              </Button>
+              <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-6 sm:gap-8">
+                <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-md shrink-0">
+                  <AvatarImage src={imagePreview || "https://placehold.co/150x150.png?text=Logo"} alt={getValues("restaurantName")} data-ai-hint="restaurant logo" />
+                  <AvatarFallback className="text-4xl"><Building /></AvatarFallback>
+                </Avatar>
+                <div className="flex-grow">
+                  <h1 className="text-3xl md:text-4xl font-bold text-primary break-words">{getValues("restaurantName")}</h1>
+                  <p className="text-md text-foreground/80 mt-1.5 flex items-center justify-center sm:justify-start">
+                    <MapPin className="h-4 w-4 mr-1.5 shrink-0" /> {getValues("location")}
+                  </p>
+                  <p className="text-sm text-foreground/90 mt-2 max-w-prose mx-auto sm:mx-0">{getValues("description")}</p>
+                </div>
+              </div>
+            </div>
 
-          {profileExistsAndLoaded && (
-            <Card className="w-full shadow-xl mt-8">
-              <CardHeader>
-                <CardTitle className="text-2xl flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
-                  Mis Platos
-                </CardTitle>
-                <CardDescription>
-                  Añade y gestiona los platos que ofreces en tu menú.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center justify-center py-8">
-                <Button variant="outline" size="lg" onClick={handleAddDish} className="py-6 px-8 text-lg">
-                  <PlusCircle className="mr-2 h-6 w-6" />
-                  Añadir Plato
+            {/* Dish Categories Section */}
+            <div className="mb-10">
+              <ScrollArea className="w-full whitespace-nowrap pb-2.5">
+                <div className="flex items-center space-x-3">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronLeft /></Button>
+                  {['Platos', 'Entradas', 'Bebidas', 'Postres', 'Especiales del Día', 'Combos Familiares', 'Vegano'].map((cat, index) => (
+                    <Button key={cat} variant={index === 0 ? 'default' : 'secondary'} size="sm" className="text-sm font-medium shadow-sm px-4 py-2 h-auto">
+                      {cat}
+                    </Button>
+                  ))}
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronRight /></Button>
+                </div>
+                <ScrollBar orientation="horizontal" className="h-2 [&>div]:h-full" />
+              </ScrollArea>
+            </div>
+
+            {/* Dishes Grid Section */}
+            <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+                {[
+                  { name: "Filete Mignon Clásico", desc: "Con salsa de champiñones y puré rústico.", price: "RD$950", img: "https://placehold.co/600x400.png", hint: "steak mushroom" },
+                  { name: "Pasta Cremosa con Pollo", desc: "Pechuga a la parrilla sobre fettuccine alfredo.", price: "RD$680", img: "https://placehold.co/600x400.png", hint: "pasta chicken" },
+                  { name: "Steak con Patatas", desc: "Jugoso corte de res con patatas doradas.", price: "RD$890", img: "https://placehold.co/600x400.png", hint: "steak potatoes" },
+                  { name: "Ribeye a la Parrilla", desc: "Corte premium con guarnición de temporada.", price: "RD$1200", img: "https://placehold.co/600x400.png", hint: "ribeye steak" },
+                  { name: "Delicia de Salmón", desc: "Salmón fresco al horno con espárragos.", price: "RD$750", img: "https://placehold.co/600x400.png", hint: "salmon asparagus" },
+                  { name: "Camarones al Ajillo", desc: "Exquisitos camarones en salsa de ajo.", price: "RD$720", img: "https://placehold.co/600x400.png", hint: "shrimp garlic" },
+                  { name: "Hamburguesa Gourmet", desc: "Carne angus, queso cheddar y pan artesanal.", price: "RD$550", img: "https://placehold.co/600x400.png", hint: "burger gourmet" },
+                  { name: "Tacos de Birria", desc: "Tradicionales tacos mexicanos con consomé.", price: "RD$450", img: "https://placehold.co/600x400.png", hint: "tacos birria" },
+                ].map((dish, i) => (
+                  <Card key={i} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col">
+                    <div className="aspect-[4/3] w-full overflow-hidden">
+                      <Image
+                        src={dish.img}
+                        alt={dish.name}
+                        width={400}
+                        height={300}
+                        className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                        data-ai-hint={dish.hint}
+                      />
+                    </div>
+                    <CardContent className="p-4 flex flex-col flex-grow">
+                      <h3 className="font-semibold text-lg text-primary leading-tight truncate">{dish.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-1 flex-grow">{dish.desc}</p>
+                      <p className="text-xl font-bold text-accent mt-2">{dish.price}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Floating Action Button to Add Dish */}
+            <Button
+              variant="default"
+              size="lg" 
+              className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
+              onClick={handleAddDish}
+              aria-label="Añadir Plato"
+            >
+              <Plus className="h-7 w-7" />
+            </Button>
+          </div>
+        ) : (
+           // Fallback: If not editing and profile doesn't exist (should be rare after fetchProfile logic)
+           // Or if user is null and initial loading is done
+           <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8">
+             <Building className="h-16 w-16 text-muted-foreground mb-4" />
+             <p className="text-lg text-muted-foreground mb-4">
+               {user ? "Aún no has configurado el perfil de tu restaurante." : "Inicia sesión para configurar tu restaurante."}
+             </p>
+             {user && (
+                <Button onClick={() => {
+                    reset({ restaurantName: "", location: "", description: "" }); 
+                    setImagePreview("https://placehold.co/128x128.png?text=Logo");
+                    setCurrentImageUrl(undefined);
+                    setImageFile(null);
+                    setIsEditing(true);
+                }}>
+                    <PlusCircle className="mr-2 h-5 w-5"/> Crear Perfil de Restaurante
                 </Button>
-                <p className="text-sm text-muted-foreground mt-4">
-                  Haz clic aquí para empezar a construir tu menú digital.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+             )}
+           </div>
+        )}
       </div>
     </ProtectedRoute>
   );
 }
+
+    
