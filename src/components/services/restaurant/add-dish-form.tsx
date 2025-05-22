@@ -134,10 +134,10 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <Utensils className="h-6 w-6 text-primary" />
-            Añadir Nuevo Plato
+            Actualizar menú
           </DialogTitle>
           <DialogDescription>
-            Completa los detalles de tu nuevo plato para el menú.
+            Completa los siguientes detalles para actualizar el menú.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -147,7 +147,7 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-md">Categoría del Plato</FormLabel>
+                  <FormLabel className="text-md">Vende de forma creativa!</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -207,7 +207,7 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-md">Título del Plato</FormLabel>
+                  <FormLabel className="text-md">Título de la publicación</FormLabel>
                   <FormControl>
                     <Input placeholder="Ej: Tacos de Birria" {...field} />
                   </FormControl>
@@ -265,7 +265,7 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Publicar Plato
+                Publicar
               </Button>
             </DialogFooter>
           </form>
