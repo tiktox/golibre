@@ -22,14 +22,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, ChevronLeft, ChevronRight, Utensils } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
-import { doc, setDoc, getDoc, serverTimestamp, type Timestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import AddDishForm from "@/components/services/restaurant/add-dish-form"; // New import
+import AddDishForm, { type DishFormData, dishCategories } from "@/components/services/restaurant/add-dish-form";
+import type { RestaurantDish } from "@/types";
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
@@ -51,6 +52,7 @@ interface RestaurantDocument {
 }
 
 const DEFAULT_PLACEHOLDER_IMAGE = "https://placehold.co/128x128.png";
+const DEFAULT_DISH_PLACEHOLDER_IMAGE = "https://placehold.co/400x300.png";
 
 export default function RestaurantProfilePage() {
   const { toast } = useToast();
@@ -61,7 +63,12 @@ export default function RestaurantProfilePage() {
   const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
-  const [isAddDishModalOpen, setIsAddDishModalOpen] = useState(false); // State for Add Dish Modal
+  
+  const [isAddDishModalOpen, setIsAddDishModalOpen] = useState(false);
+  const [dishesData, setDishesData] = useState<RestaurantDish[]>([]);
+  const [isLoadingDishes, setIsLoadingDishes] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(dishCategories[0]?.value || null);
+
 
   const form = useForm<RestaurantProfileFormData>({
     resolver: zodResolver(restaurantProfileSchema),
@@ -73,6 +80,26 @@ export default function RestaurantProfilePage() {
   });
 
   const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues } = form;
+
+  const fetchDishes = useCallback(async (userId: string) => {
+    if (!userId) return;
+    setIsLoadingDishes(true);
+    try {
+      const dishesColRef = collection(db, "restaurants", userId, "dishes");
+      const q = query(dishesColRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedDishes: RestaurantDish[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedDishes.push({ id: doc.id, ...doc.data() } as RestaurantDish);
+      });
+      setDishesData(fetchedDishes);
+    } catch (error) {
+      console.error("Error fetching dishes:", error);
+      toast({ variant: "destructive", title: "Error al cargar platos", description: "No se pudieron cargar los platos." });
+    } finally {
+      setIsLoadingDishes(false);
+    }
+  }, [toast]);
 
   const fetchProfile = useCallback(async () => {
     if (!user) {
@@ -101,11 +128,13 @@ export default function RestaurantProfilePage() {
         }
         setProfileExistsAndLoaded(true);
         setIsEditing(false); 
+        await fetchDishes(user.uid); // Fetch dishes after profile loads
       } else {
         setProfileExistsAndLoaded(false);
         setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
         setCurrentImageUrl(undefined);
         setIsEditing(true); 
+        setDishesData([]);
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -118,7 +147,7 @@ export default function RestaurantProfilePage() {
     } finally {
       setIsLoadingProfile(false);
     }
-  }, [user, reset, toast]);
+  }, [user, reset, toast, fetchDishes]);
 
   useEffect(() => {
     fetchProfile();
@@ -134,7 +163,7 @@ export default function RestaurantProfilePage() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setValue('profileImageFile', event.target.files, { shouldDirty: true });
+      setValue('profileImageFile', file, { shouldDirty: true }); // Keep Zod aware of file change
     } else {
       setImageFile(null);
       setImagePreview(currentImageUrl || DEFAULT_PLACEHOLDER_IMAGE);
@@ -142,7 +171,7 @@ export default function RestaurantProfilePage() {
     }
   };
 
-  async function onSubmit(data: RestaurantProfileFormData) {
+  async function onSubmitProfile(data: RestaurantProfileFormData) {
     if (!user) {
       toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión para guardar." });
       return;
@@ -151,7 +180,7 @@ export default function RestaurantProfilePage() {
     let uploadedImageUrlOutcome: string | null = currentImageUrl === undefined ? null : currentImageUrl;
 
     if (imageFile) {
-      const storageRef = ref(storage, `restaurants/${user.uid}/profileImage/${imageFile.name}`);
+      const storageRef = ref(storage, `restaurants/${user.uid}/profileImage/${imageFile.name}-${Date.now()}`);
       try {
         const snapshot = await uploadBytes(storageRef, imageFile);
         uploadedImageUrlOutcome = await getDownloadURL(snapshot.ref);
@@ -207,6 +236,9 @@ export default function RestaurantProfilePage() {
       }
       setProfileExistsAndLoaded(true);
       setIsEditing(false); 
+      if (!docSnap.exists()) { // If it was a new profile, fetch dishes
+        await fetchDishes(user.uid);
+      }
       
     } catch (error: any) {
       console.error("Error saving profile:", error);
@@ -219,19 +251,59 @@ export default function RestaurantProfilePage() {
   }
 
   const handleOpenAddDishModal = () => {
+    if (!profileExistsAndLoaded) {
+        toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante." });
+        setIsEditing(true); // Prompt to edit profile if not saved
+        return;
+    }
     setIsAddDishModalOpen(true);
   };
 
-  // This function will be called when a dish is successfully "added" from the modal
-  const handleDishAdded = (dishData: any) => { // Use 'any' for now, will be DishFormData type
-    console.log("Nuevo plato añadido:", dishData);
-    toast({
-      title: "¡Plato Añadido (Simulado)!",
-      description: `El plato "${dishData.title}" ha sido registrado.`,
-    });
-    setIsAddDishModalOpen(false); // Close the modal
-    // Here you would typically re-fetch dishes or update local state
+  const handleDishAdded = async (dishData: DishFormData, dishImageFile: File | null) => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión." });
+      return;
+    }
+    let dishImageUrl: string | null = null;
+    try {
+      if (dishImageFile) {
+        const imageName = `${Date.now()}-${dishImageFile.name}`;
+        const dishImageRef = ref(storage, `restaurants/${user.uid}/dishes/${imageName}`);
+        await uploadBytes(dishImageRef, dishImageFile);
+        dishImageUrl = await getDownloadURL(dishImageRef);
+      }
+
+      const newDish: Omit<RestaurantDish, 'id' | 'createdAt' | 'updatedAt'> = {
+        title: dishData.title,
+        description: dishData.description,
+        price: dishData.price, // Already a number from Zod transform
+        category: dishData.category,
+        imageUrl: dishImageUrl,
+        restaurantId: user.uid,
+      };
+      
+      const dishesColRef = collection(db, "restaurants", user.uid, "dishes");
+      await addDoc(dishesColRef, {
+        ...newDish,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "¡Plato Añadido!",
+        description: `El plato "${dishData.title}" ha sido añadido a tu menú.`,
+      });
+      setIsAddDishModalOpen(false);
+      await fetchDishes(user.uid); // Re-fetch dishes to update the list
+    } catch (error) {
+      console.error("Error adding dish:", error);
+      toast({ variant: "destructive", title: "Error al Añadir Plato", description: "No se pudo guardar el plato." });
+    }
   };
+  
+  const filteredDishes = selectedCategoryFilter
+    ? dishesData.filter(dish => dish.category === selectedCategoryFilter)
+    : dishesData;
 
 
   let buttonText = "Guardar Cambios";
@@ -240,10 +312,10 @@ export default function RestaurantProfilePage() {
   if (isSubmitting) {
     buttonText = "Guardando...";
     ButtonIcon = Loader2;
-  } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded) {
+  } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded && isEditing) {
     buttonText = "Cambios Guardados";
     ButtonIcon = Check;
-  } else if (!profileExistsAndLoaded && !isDirty) {
+  } else if (!profileExistsAndLoaded && !isDirty && isEditing) {
     buttonText = "Crear Perfil";
   }
 
@@ -284,7 +356,7 @@ export default function RestaurantProfilePage() {
               </CardDescription>
             </CardHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)}>
+              <form onSubmit={form.handleSubmit(onSubmitProfile)}>
                 <CardContent className="space-y-6">
                   <FormField
                     control={control}
@@ -377,7 +449,7 @@ export default function RestaurantProfilePage() {
                   <Button 
                     type="submit" 
                     className="sm:w-auto w-full" 
-                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded) || !user}
+                    disabled={isSubmitting || (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded && isEditing) || !user}
                   >
                     <ButtonIcon className={`mr-2 h-5 w-5 ${isSubmitting ? 'animate-spin' : ''}`}/>
                     {buttonText}
@@ -401,15 +473,15 @@ export default function RestaurantProfilePage() {
               </Button>
               <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-6 sm:gap-8">
                 <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-md shrink-0">
-                  <AvatarImage src={imagePreview || DEFAULT_PLACEHOLDER_IMAGE} alt={getValues("restaurantName")} data-ai-hint="restaurant logo"/>
+                  <AvatarImage src={imagePreview || DEFAULT_PLACEHOLDER_IMAGE} alt={getValues("restaurantName") || "Restaurant"} data-ai-hint="restaurant logo"/>
                   <AvatarFallback className="text-4xl"><Building /></AvatarFallback>
                 </Avatar>
                 <div className="flex-grow">
-                  <h1 className="text-3xl md:text-4xl font-bold text-primary break-words">{getValues("restaurantName")}</h1>
+                  <h1 className="text-3xl md:text-4xl font-bold text-primary break-words">{getValues("restaurantName") || "Nombre no disponible"}</h1>
                   <p className="text-md text-foreground/80 mt-1.5 flex items-center justify-center sm:justify-start">
-                    <MapPin className="h-4 w-4 mr-1.5 shrink-0" /> {getValues("location")}
+                    <MapPin className="h-4 w-4 mr-1.5 shrink-0" /> {getValues("location") || "Ubicación no disponible"}
                   </p>
-                  <p className="text-sm text-foreground/90 mt-2 max-w-prose mx-auto sm:mx-0">{getValues("description")}</p>
+                  <p className="text-sm text-foreground/90 mt-2 max-w-prose mx-auto sm:mx-0">{getValues("description") || "Descripción no disponible"}</p>
                 </div>
               </div>
             </div>
@@ -418,13 +490,20 @@ export default function RestaurantProfilePage() {
             <div className="mb-10">
               <ScrollArea className="w-full whitespace-nowrap pb-2.5">
                 <div className="flex items-center space-x-3">
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronLeft /></Button>
-                  {['Platos', 'Entradas', 'Bebidas', 'Postres', 'Especiales del Día', 'Combos Familiares', 'Vegano'].map((cat, index) => (
-                    <Button key={cat} variant={index === 0 ? 'default' : 'secondary'} size="sm" className="text-sm font-medium shadow-sm px-4 py-2 h-auto">
-                      {cat}
+                  {/* TODO: Add real scroll buttons if many categories */}
+                  {/* <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronLeft /></Button> */}
+                  {dishCategories.map((cat) => (
+                    <Button 
+                      key={cat.value} 
+                      variant={selectedCategoryFilter === cat.value ? 'default' : 'secondary'} 
+                      size="sm" 
+                      className="text-sm font-medium shadow-sm px-4 py-2 h-auto"
+                      onClick={() => setSelectedCategoryFilter(cat.value)}
+                    >
+                      <cat.icon className="mr-2 h-4 w-4" /> {cat.label}
                     </Button>
                   ))}
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronRight /></Button>
+                  {/* <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronRight /></Button> */}
                 </div>
                 <ScrollBar orientation="horizontal" className="h-2 [&>div]:h-full" />
               </ScrollArea>
@@ -432,27 +511,52 @@ export default function RestaurantProfilePage() {
 
             {/* Dishes Grid Section */}
             <div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                {[].map((dish: any, i: number) => ( 
-                  <Card key={i} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col">
-                    <div className="aspect-[4/3] w-full overflow-hidden">
-                      <Image
-                        src={dish.img}
-                        alt={dish.name}
-                        width={400}
-                        height={300}
-                        className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
-                        data-ai-hint={dish.hint}
-                      />
-                    </div>
-                    <CardContent className="p-4 flex flex-col flex-grow">
-                      <h3 className="font-semibold text-lg text-primary leading-tight truncate">{dish.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-1 flex-grow">{dish.desc}</p>
-                      <p className="text-xl font-bold text-accent mt-2">{dish.price}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {isLoadingDishes ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+                  {[...Array(5)].map((_, i) => (
+                    <Card key={i} className="overflow-hidden shadow-md rounded-lg flex flex-col">
+                      <Skeleton className="aspect-[4/3] w-full" />
+                      <CardContent className="p-4 flex flex-col flex-grow space-y-2">
+                        <Skeleton className="h-6 w-3/4" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-8 w-1/3 mt-2" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : filteredDishes.length === 0 ? (
+                <div className="text-center py-10">
+                    <Utensils className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-lg text-muted-foreground">
+                      {selectedCategoryFilter ? `No hay platos en la categoría "${dishCategories.find(c=>c.value === selectedCategoryFilter)?.label || selectedCategoryFilter}".` : "Aún no has añadido ningún plato."}
+                    </p>
+                    <p className="text-sm text-muted-foreground">¡Haz clic en el botón '+' para empezar a construir tu menú!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+                  {filteredDishes.map((dish) => ( 
+                    <Card key={dish.id} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col group">
+                      <div className="aspect-[4/3] w-full overflow-hidden relative">
+                        <Image
+                          src={dish.imageUrl || DEFAULT_DISH_PLACEHOLDER_IMAGE}
+                          alt={dish.title}
+                          layout="fill"
+                          objectFit="cover"
+                          className="group-hover:scale-105 transition-transform duration-300"
+                          data-ai-hint={`${dish.category} food`}
+                        />
+                      </div>
+                      <CardContent className="p-4 flex flex-col flex-grow">
+                        <h3 className="font-semibold text-lg text-primary leading-tight truncate" title={dish.title}>{dish.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-1 flex-grow" title={dish.description}>{dish.description}</p>
+                        <p className="text-xl font-bold text-accent mt-2">RD${dish.price.toFixed(2)}</p>
+                      </CardContent>
+                       {/* Future: Add edit/delete buttons for dishes here */}
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Floating Action Button to Add Dish */}
@@ -462,6 +566,7 @@ export default function RestaurantProfilePage() {
               className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
               onClick={handleOpenAddDishModal}
               aria-label="Añadir Plato"
+              disabled={!profileExistsAndLoaded || isSubmitting}
             >
               <Plus className="h-7 w-7" />
             </Button>
@@ -486,11 +591,13 @@ export default function RestaurantProfilePage() {
            </div>
         )}
       </div>
-      <AddDishForm 
-        isOpen={isAddDishModalOpen} 
-        onOpenChange={setIsAddDishModalOpen}
-        onDishAdd={handleDishAdded}
-      />
+      {profileExistsAndLoaded && user && ( // Only render modal if profile exists and user is logged in
+          <AddDishForm 
+            isOpen={isAddDishModalOpen} 
+            onOpenChange={setIsAddDishModalOpen}
+            onDishAdd={handleDishAdded}
+          />
+      )}
     </ProtectedRoute>
   );
 }

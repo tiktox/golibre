@@ -33,10 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Camera, Utensils, Coffee, IceCream, Sparkles, Users, Vegan, DollarSign, Loader2 } from "lucide-react";
+import { Camera, Utensils, Coffee, IceCream, Sparkles, Users, Vegan, DollarSign, Loader2, Type } from "lucide-react"; // Added Type for title
 import { useToast } from "@/hooks/use-toast";
 
-const dishCategories = [
+export const dishCategories = [
   { value: "platos", label: "Platos", icon: Utensils },
   { value: "entradas", label: "Entradas", icon: Sparkles },
   { value: "bebidas", label: "Bebidas", icon: Coffee },
@@ -48,7 +48,7 @@ const dishCategories = [
 
 const dishFormSchema = z.object({
   category: z.string().min(1, "Selecciona una categoría."),
-  imageFile: z.any().optional(),
+  // imageFile is handled separately, not part of Zod schema for direct form data
   title: z.string().min(2, { message: "El título debe tener al menos 2 caracteres." }),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(200, {message: "Máximo 200 caracteres."}),
   price: z.string()
@@ -63,7 +63,7 @@ export type DishFormData = z.infer<typeof dishFormSchema>;
 interface AddDishFormProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onDishAdd: (data: DishFormData) => void; // Callback when dish is added
+  onDishAdd: (data: DishFormData, imageFile: File | null) => Promise<void>; 
 }
 
 const DEFAULT_DISH_PLACEHOLDER_IMAGE = "https://placehold.co/400x300.png";
@@ -77,24 +77,21 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
     resolver: zodResolver(dishFormSchema),
     defaultValues: {
       category: "",
-      title: "Tacos de Birria", // Default as per request
-      description: "Tradicionales tacos mexicanos con consomé.", // Default
-      price: 450, // Default
-      imageFile: undefined,
+      title: "Tacos de Birria",
+      description: "Tradicionales tacos mexicanos con consomé.",
+      price: 450,
     },
   });
 
   const { formState: { isSubmitting }, control, handleSubmit, reset, setValue } = form;
 
   useEffect(() => {
-    // Reset form and image preview when modal is closed/reopened
     if (!isOpen) {
       reset({
         category: "",
         title: "Tacos de Birria",
         description: "Tradicionales tacos mexicanos con consomé.",
         price: 450,
-        imageFile: undefined,
       });
       setImagePreview(DEFAULT_DISH_PLACEHOLDER_IMAGE);
       setImageFile(null);
@@ -110,22 +107,16 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setValue('imageFile', file, { shouldDirty: true });
+      // No need to setValue for 'imageFile' in form data as it's handled separately
     } else {
       setImageFile(null);
       setImagePreview(DEFAULT_DISH_PLACEHOLDER_IMAGE);
-      setValue('imageFile', undefined, { shouldDirty: true });
     }
   };
 
   async function onSubmit(data: DishFormData) {
-    // For now, we just pass the data up and show a toast.
-    // Actual image upload and Firestore save will be handled in RestaurantProfilePage or a service.
-    const dataToSubmit = { ...data, imageFile: imageFile }; // Pass the actual file
-    
-    console.log("Dish form submitted:", dataToSubmit);
-    onDishAdd(dataToSubmit);
-    // Modal will be closed by onDishAdd in parent
+    await onDishAdd(data, imageFile);
+    // Modal closing and toast will be handled by the parent component (RestaurantProfilePage)
   }
 
   return (
@@ -170,44 +161,39 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               )}
             />
 
-            <FormField
-              control={control}
-              name="imageFile"
-              render={() => (
-                <FormItem className="flex flex-col items-center">
-                  <FormLabel htmlFor="dish-image-upload" className="cursor-pointer w-full aspect-[4/3] rounded-md border-2 border-dashed border-primary/50 hover:border-primary transition-colors flex items-center justify-center relative overflow-hidden bg-muted/50">
-                    {imagePreview ? (
-                      <Image src={imagePreview} alt="Vista previa del plato" layout="fill" objectFit="cover" data-ai-hint="dish food"/>
-                    ) : (
-                      <div className="text-center text-muted-foreground">
-                        <Camera className="h-12 w-12 mx-auto mb-2" />
-                        <p>Subir Imagen del Plato</p>
-                      </div>
-                    )}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      id="dish-image-upload"
-                      type="file"
-                      accept="image/png, image/jpeg, image/webp"
-                      className="sr-only"
-                      onChange={handleImageChange}
-                    />
-                  </FormControl>
-                  <FormDescription className="mt-1 text-center text-xs">
-                    PNG, JPG, WEBP (Recomendado: 400x300px o similar).
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Image File Input - Not part of react-hook-form data directly */}
+            <FormItem className="flex flex-col items-center">
+              <FormLabel htmlFor="dish-image-upload" className="cursor-pointer w-full aspect-[4/3] rounded-md border-2 border-dashed border-primary/50 hover:border-primary transition-colors flex items-center justify-center relative overflow-hidden bg-muted/50">
+                {imagePreview ? (
+                  <Image src={imagePreview} alt="Vista previa del plato" layout="fill" objectFit="cover" data-ai-hint="food dish"/>
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <Camera className="h-12 w-12 mx-auto mb-2" />
+                    <p>Subir Imagen del Plato</p>
+                  </div>
+                )}
+              </FormLabel>
+              <FormControl>
+                <Input
+                  id="dish-image-upload"
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp"
+                  className="sr-only"
+                  onChange={handleImageChange}
+                />
+              </FormControl>
+              <FormDescription className="mt-1 text-center text-xs">
+                PNG, JPG, WEBP (Recomendado: 400x300px o similar).
+              </FormDescription>
+              <FormMessage /> {/* For potential manual image validation errors if needed */}
+            </FormItem>
 
             <FormField
               control={control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-md">Título de la publicación</FormLabel>
+                  <FormLabel className="text-md flex items-center gap-1"><Type className="h-4 w-4" />Título de la publicación</FormLabel>
                   <FormControl>
                     <Input placeholder="Ej: Tacos de Birria" {...field} />
                   </FormControl>
@@ -237,19 +223,20 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
             <FormField
               control={control}
               name="price"
-              render={({ field: { onChange, value, ...restField } }) => (
+              render={({ field: { onChange, value, ...restField } }) => ( // value will be number due to transform
                 <FormItem>
                   <FormLabel className="text-md flex items-center gap-1"><DollarSign className="h-4 w-4"/>Precio (RD$)</FormLabel>
                   <FormControl>
                     <Input 
-                      type="text" // Input as text to allow decimal points easily
+                      type="text" 
                       placeholder="Ej: 450.00" 
-                      value={value === undefined || isNaN(value) ? "" : String(value)}
+                      value={value === undefined || isNaN(value) ? "" : String(value)} // Display as string
                       onChange={(e) => {
                         const val = e.target.value;
-                        // Allow only numbers and one decimal point
-                        if (/^\d*\.?\d*$/.test(val)) {
-                           onChange(val); // Pass string to react-hook-form, Zod will transform
+                        if (/^\d*\.?\d{0,2}$/.test(val)) { // Allow up to 2 decimal places
+                           onChange(val); 
+                        } else if (val === "") {
+                           onChange(""); // Allow clearing the input
                         }
                       }}
                       {...restField} 
@@ -274,4 +261,3 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
     </Dialog>
   );
 }
-

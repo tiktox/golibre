@@ -1,3 +1,6 @@
+
+import type { Timestamp } from 'firebase/firestore';
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -47,4 +50,20 @@ export interface AdSuggestion {
   imageUrl?: string;
   callToAction: string; // e.g., "Learn More"
   link: string;
+}
+
+export interface RestaurantDish {
+  id: string; // Firestore document ID
+  title: string;
+  description: string;
+  price: number; 
+  category: string; // e.g., "platos", "bebidas"
+  imageUrl?: string | null;
+  restaurantId: string; // UID of the restaurant owner (matches the document ID in 'restaurants' collection)
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  // Future considerations:
+  // isAvailable: boolean;
+  // ingredients: string[];
+  // allergens: string[];
 }
