@@ -95,7 +95,7 @@ export default function RestaurantProfilePage() {
       setDishesData(fetchedDishes);
     } catch (error) {
       console.error("Error fetching dishes:", error);
-      toast({ variant: "destructive", title: "Error al cargar platos", description: "No se pudieron cargar los platos." });
+      toast({ variant: "destructive", title: "Error al cargar platos", description: "No se pudieron cargar los platos. Verifique los permisos de Firebase." });
     } finally {
       setIsLoadingDishes(false);
     }
@@ -128,7 +128,7 @@ export default function RestaurantProfilePage() {
         }
         setProfileExistsAndLoaded(true);
         setIsEditing(false); 
-        await fetchDishes(user.uid); // Fetch dishes after profile loads
+        await fetchDishes(user.uid);
       } else {
         setProfileExistsAndLoaded(false);
         setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
@@ -141,7 +141,7 @@ export default function RestaurantProfilePage() {
       toast({
         variant: "destructive",
         title: "Error al cargar el perfil",
-        description: "No se pudo cargar la información de tu restaurante.",
+        description: (error as any).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase.",
       });
       setIsEditing(true); 
     } finally {
@@ -163,7 +163,7 @@ export default function RestaurantProfilePage() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setValue('profileImageFile', file, { shouldDirty: true }); // Keep Zod aware of file change
+      setValue('profileImageFile', file, { shouldDirty: true });
     } else {
       setImageFile(null);
       setImagePreview(currentImageUrl || DEFAULT_PLACEHOLDER_IMAGE);
@@ -189,14 +189,14 @@ export default function RestaurantProfilePage() {
         toast({
           variant: "destructive",
           title: "Error al subir imagen",
-          description: "No se pudo guardar la imagen de perfil.",
+          description: (error as any).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase.",
         });
         return;
       }
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome;
+    const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -236,7 +236,7 @@ export default function RestaurantProfilePage() {
       }
       setProfileExistsAndLoaded(true);
       setIsEditing(false); 
-      if (!docSnap.exists()) { // If it was a new profile, fetch dishes
+      if (!docSnap.exists()) {
         await fetchDishes(user.uid);
       }
       
@@ -245,7 +245,7 @@ export default function RestaurantProfilePage() {
       toast({
         variant: "destructive",
         title: "Error al guardar",
-        description: error.message || "No se pudo guardar la información del restaurante.",
+        description: (error as any).message || "No se pudo guardar la información del restaurante. Verifique los permisos de Firebase.",
       });
     }
   }
@@ -253,7 +253,7 @@ export default function RestaurantProfilePage() {
   const handleOpenAddDishModal = () => {
     if (!profileExistsAndLoaded) {
         toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante." });
-        setIsEditing(true); // Prompt to edit profile if not saved
+        setIsEditing(true);
         return;
     }
     setIsAddDishModalOpen(true);
@@ -276,7 +276,7 @@ export default function RestaurantProfilePage() {
       const newDish: Omit<RestaurantDish, 'id' | 'createdAt' | 'updatedAt'> = {
         title: dishData.title,
         description: dishData.description,
-        price: dishData.price, // Already a number from Zod transform
+        price: dishData.price,
         category: dishData.category,
         imageUrl: dishImageUrl,
         restaurantId: user.uid,
@@ -294,10 +294,14 @@ export default function RestaurantProfilePage() {
         description: `El plato "${dishData.title}" ha sido añadido a tu menú.`,
       });
       setIsAddDishModalOpen(false);
-      await fetchDishes(user.uid); // Re-fetch dishes to update the list
+      await fetchDishes(user.uid);
     } catch (error) {
       console.error("Error adding dish:", error);
-      toast({ variant: "destructive", title: "Error al Añadir Plato", description: "No se pudo guardar el plato." });
+      toast({ 
+        variant: "destructive", 
+        title: "Error al Añadir Plato", 
+        description: (error as any).message || "No se pudo guardar el plato. Verifique los permisos de Firebase." 
+      });
     }
   };
   
@@ -490,8 +494,6 @@ export default function RestaurantProfilePage() {
             <div className="mb-10">
               <ScrollArea className="w-full whitespace-nowrap pb-2.5">
                 <div className="flex items-center space-x-3">
-                  {/* TODO: Add real scroll buttons if many categories */}
-                  {/* <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronLeft /></Button> */}
                   {dishCategories.map((cat) => (
                     <Button 
                       key={cat.value} 
@@ -503,7 +505,6 @@ export default function RestaurantProfilePage() {
                       <cat.icon className="mr-2 h-4 w-4" /> {cat.label}
                     </Button>
                   ))}
-                  {/* <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full opacity-80 hover:opacity-100 hidden sm:flex"><ChevronRight /></Button> */}
                 </div>
                 <ScrollBar orientation="horizontal" className="h-2 [&>div]:h-full" />
               </ScrollArea>
@@ -552,14 +553,12 @@ export default function RestaurantProfilePage() {
                         <p className="text-xs text-muted-foreground mt-1 flex-grow" title={dish.description}>{dish.description}</p>
                         <p className="text-xl font-bold text-accent mt-2">RD${dish.price.toFixed(2)}</p>
                       </CardContent>
-                       {/* Future: Add edit/delete buttons for dishes here */}
                     </Card>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Floating Action Button to Add Dish */}
             <Button
               variant="default"
               size="lg" 
@@ -591,7 +590,7 @@ export default function RestaurantProfilePage() {
            </div>
         )}
       </div>
-      {profileExistsAndLoaded && user && ( // Only render modal if profile exists and user is logged in
+      {profileExistsAndLoaded && user && (
           <AddDishForm 
             isOpen={isAddDishModalOpen} 
             onOpenChange={setIsAddDishModalOpen}
@@ -601,3 +600,4 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
+
