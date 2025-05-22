@@ -22,11 +22,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, ChevronLeft, ChevronRight, Utensils } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, Utensils } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import AddDishForm, { type DishFormData, dishCategories } from "@/components/services/restaurant/add-dish-form";
@@ -95,7 +95,7 @@ export default function RestaurantProfilePage() {
       setDishesData(fetchedDishes);
     } catch (error) {
       console.error("Error fetching dishes:", error);
-      toast({ variant: "destructive", title: "Error al cargar platos", description: "No se pudieron cargar los platos. Verifique los permisos de Firebase." });
+      toast({ variant: "destructive", title: "Error al cargar platos", description: "No se pudieron cargar los platos. Verifique los permisos de Firebase o la consola del navegador para más detalles." });
     } finally {
       setIsLoadingDishes(false);
     }
@@ -141,7 +141,7 @@ export default function RestaurantProfilePage() {
       toast({
         variant: "destructive",
         title: "Error al cargar el perfil",
-        description: (error as any).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase.",
+        description: (error as any).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase o la consola del navegador para más detalles.",
       });
       setIsEditing(true); 
     } finally {
@@ -173,7 +173,7 @@ export default function RestaurantProfilePage() {
 
   async function onSubmitProfile(data: RestaurantProfileFormData) {
     if (!user) {
-      toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión para guardar." });
+      toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para guardar el perfil." });
       return;
     }
 
@@ -189,7 +189,7 @@ export default function RestaurantProfilePage() {
         toast({
           variant: "destructive",
           title: "Error al subir imagen",
-          description: (error as any).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase.",
+          description: (error as any).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase Storage o la consola del navegador para más detalles.",
         });
         return;
       }
@@ -236,7 +236,7 @@ export default function RestaurantProfilePage() {
       }
       setProfileExistsAndLoaded(true);
       setIsEditing(false); 
-      if (!docSnap.exists()) {
+      if (!docSnap.exists()) { // If it was a new profile, fetch dishes (which might be empty)
         await fetchDishes(user.uid);
       }
       
@@ -244,16 +244,20 @@ export default function RestaurantProfilePage() {
       console.error("Error saving profile:", error);
       toast({
         variant: "destructive",
-        title: "Error al guardar",
-        description: (error as any).message || "No se pudo guardar la información del restaurante. Verifique los permisos de Firebase.",
+        title: "Error al guardar perfil",
+        description: (error as any).message || "No se pudo guardar la información del restaurante. Verifique los permisos de Firestore o la consola del navegador para más detalles.",
       });
     }
   }
 
   const handleOpenAddDishModal = () => {
+    if (!user) {
+        toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para añadir platos." });
+        return;
+    }
     if (!profileExistsAndLoaded) {
-        toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante." });
-        setIsEditing(true);
+        toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante para poder añadir platos." });
+        setIsEditing(true); // Encourage saving profile first
         return;
     }
     setIsAddDishModalOpen(true);
@@ -261,7 +265,7 @@ export default function RestaurantProfilePage() {
 
   const handleDishAdded = async (dishData: DishFormData, dishImageFile: File | null) => {
     if (!user) {
-      toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión." });
+      toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para añadir un plato." });
       return;
     }
     let dishImageUrl: string | null = null;
@@ -294,13 +298,13 @@ export default function RestaurantProfilePage() {
         description: `El plato "${dishData.title}" ha sido añadido a tu menú.`,
       });
       setIsAddDishModalOpen(false);
-      await fetchDishes(user.uid);
+      await fetchDishes(user.uid); // Refresh the dishes list
     } catch (error) {
       console.error("Error adding dish:", error);
       toast({ 
         variant: "destructive", 
         title: "Error al Añadir Plato", 
-        description: (error as any).message || "No se pudo guardar el plato. Verifique los permisos de Firebase." 
+        description: (error as any).message || "No se pudo guardar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
       });
     }
   };
@@ -319,7 +323,7 @@ export default function RestaurantProfilePage() {
   } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded && isEditing) {
     buttonText = "Cambios Guardados";
     ButtonIcon = Check;
-  } else if (!profileExistsAndLoaded && !isDirty && isEditing) {
+  } else if (!profileExistsAndLoaded && !isDirty && isEditing) { // Initial state for new profile
     buttonText = "Crear Perfil";
   }
 
@@ -347,8 +351,8 @@ export default function RestaurantProfilePage() {
   return (
     <ProtectedRoute allowedRoles={['driver']}>
       <div className="container mx-auto px-4 py-8">
-        {isEditing ? (
-          // EDITING VIEW
+        {isEditing || !profileExistsAndLoaded ? (
+          // EDITING VIEW or INITIAL PROFILE CREATION VIEW
           <Card className="w-full max-w-2xl mx-auto shadow-xl">
             <CardHeader>
               <CardTitle className="text-2xl flex items-center gap-2">
@@ -442,10 +446,10 @@ export default function RestaurantProfilePage() {
                   />
                 </CardContent>
                 <CardFooter className="flex flex-col sm:flex-row gap-2 justify-end">
-                  {profileExistsAndLoaded && ( 
+                  {profileExistsAndLoaded && isEditing && ( 
                     <Button type="button" variant="outline" onClick={() => {
                       setIsEditing(false);
-                      fetchProfile(); 
+                      fetchProfile(); // Re-fetch to reset form to last saved state
                     }}>
                       Cancelar
                     </Button>
@@ -462,8 +466,7 @@ export default function RestaurantProfilePage() {
               </form>
             </Form>
           </Card>
-        ) : profileExistsAndLoaded ? (
-          // DISPLAY VIEW (Only if profile exists and not editing)
+        ) : ( // DISPLAY VIEW (Only if profile exists and not editing)
           <div className="w-full max-w-5xl mx-auto">
             {/* Profile Header Section */}
             <div className="bg-muted/70 dark:bg-muted/40 p-6 md:p-8 rounded-xl shadow-lg mb-10 relative">
@@ -514,7 +517,7 @@ export default function RestaurantProfilePage() {
             <div>
               {isLoadingDishes ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                  {[...Array(5)].map((_, i) => (
+                  {[...Array(5)].map((_, i) => ( // Show 5 skeleton cards
                     <Card key={i} className="overflow-hidden shadow-md rounded-lg flex flex-col">
                       <Skeleton className="aspect-[4/3] w-full" />
                       <CardContent className="p-4 flex flex-col flex-grow space-y-2">
@@ -565,31 +568,14 @@ export default function RestaurantProfilePage() {
               className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
               onClick={handleOpenAddDishModal}
               aria-label="Añadir Plato"
-              disabled={!profileExistsAndLoaded || isSubmitting}
+              disabled={!profileExistsAndLoaded || isSubmitting || !user} // Disable if no profile or submitting or no user
             >
               <Plus className="h-7 w-7" />
             </Button>
           </div>
-        ) : (
-           <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8">
-             <Building className="h-16 w-16 text-muted-foreground mb-4" />
-             <p className="text-lg text-muted-foreground mb-4">
-               {user ? "Aún no has configurado el perfil de tu restaurante." : "Inicia sesión para configurar tu restaurante."}
-             </p>
-             {user && (
-                <Button onClick={() => {
-                    reset({ restaurantName: "", location: "", description: "" }); 
-                    setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
-                    setCurrentImageUrl(undefined);
-                    setImageFile(null);
-                    setIsEditing(true);
-                }}>
-                    <PlusCircle className="mr-2 h-5 w-5"/> Crear Perfil de Restaurante
-                </Button>
-             )}
-           </div>
         )}
       </div>
+      {/* Render AddDishForm only if profile exists and user is logged in, otherwise it doesn't make sense to add dishes */}
       {profileExistsAndLoaded && user && (
           <AddDishForm 
             isOpen={isAddDishModalOpen} 
@@ -600,4 +586,5 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
+
 
