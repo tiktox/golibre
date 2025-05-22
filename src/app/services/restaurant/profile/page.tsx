@@ -33,7 +33,7 @@ const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
   location: z.string().min(5, { message: "La ubicación debe tener al menos 5 caracteres." }),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(300, { message: "La descripción no puede exceder los 300 caracteres." }),
-  profileImageFile: z.any().optional(), // For the file input - Changed from z.instanceof(FileList)
+  profileImageFile: z.any().optional(),
 });
 
 type RestaurantProfileFormData = z.infer<typeof restaurantProfileSchema>;
@@ -42,7 +42,7 @@ interface RestaurantDocument {
   restaurantName: string;
   location: string;
   description: string;
-  imageUrl?: string;
+  imageUrl?: string | null; // Allow null for Firestore compatibility
   ownerId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -55,7 +55,7 @@ export default function RestaurantProfilePage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>(undefined);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null | undefined>(undefined);
 
 
   const form = useForm<RestaurantProfileFormData>({
@@ -86,14 +86,18 @@ export default function RestaurantProfilePage() {
           location: data.location,
           description: data.description,
         });
-        if (data.imageUrl) {
+        if (data.imageUrl) { // Handles string URL, null will be falsy
           setImagePreview(data.imageUrl);
           setCurrentImageUrl(data.imageUrl);
+        } else {
+          setImagePreview("https://placehold.co/128x128.png?text=Logo");
+          setCurrentImageUrl(null); // Explicitly set to null if no image URL from DB
         }
         setProfileExistsAndLoaded(true);
       } else {
-        // No profile exists yet, form will be blank
-        setProfileExistsAndLoaded(false); 
+        setProfileExistsAndLoaded(false);
+        setImagePreview("https://placehold.co/128x128.png?text=Logo");
+        setCurrentImageUrl(undefined); // No profile, so no current image
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -123,7 +127,6 @@ export default function RestaurantProfilePage() {
       setValue('profileImageFile', event.target.files, { shouldDirty: true });
     } else {
       setImageFile(null);
-      // If no file selected, and there's a current image URL, show that. Otherwise, placeholder.
       setImagePreview(currentImageUrl || "https://placehold.co/128x128.png?text=Logo");
       setValue('profileImageFile', undefined, { shouldDirty: true });
     }
@@ -135,14 +138,13 @@ export default function RestaurantProfilePage() {
       return;
     }
 
-    let uploadedImageUrl = currentImageUrl; // Keep existing image URL by default
+    let uploadedImageUrlOutcome: string | null = currentImageUrl === undefined ? null : currentImageUrl;
 
-    if (imageFile) { // If a new file was selected for upload
+    if (imageFile) {
       const storageRef = ref(storage, `restaurants/${user.uid}/profileImage/${imageFile.name}`);
       try {
         const snapshot = await uploadBytes(storageRef, imageFile);
-        uploadedImageUrl = await getDownloadURL(snapshot.ref);
-        setCurrentImageUrl(uploadedImageUrl); // Update current image URL after successful upload
+        uploadedImageUrlOutcome = await getDownloadURL(snapshot.ref);
       } catch (error) {
         console.error("Error uploading image:", error);
         toast({
@@ -150,51 +152,58 @@ export default function RestaurantProfilePage() {
           title: "Error al subir imagen",
           description: "No se pudo guardar la imagen de perfil.",
         });
-        return; // Stop submission if image upload fails
+        return;
       }
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any } = {
+    // Ensure imageUrl is null if undefined, otherwise use the string URL
+    const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
+
+    const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
       restaurantName: data.restaurantName,
       location: data.location,
       description: data.description,
-      imageUrl: uploadedImageUrl, // This will be undefined if no image was ever set and no new one uploaded
+      imageUrl: imageUrlForFirestore, 
       updatedAt: serverTimestamp(),
     };
 
     try {
-      // Check if doc exists to set createdAt only once
       const docSnap = await getDoc(restaurantDocRef);
       if (!docSnap.exists()) {
         profileDataToSave.createdAt = serverTimestamp();
       }
 
-      await setDoc(restaurantDocRef, profileDataToSave, { merge: true }); // Merge to avoid overwriting createdAt
+      await setDoc(restaurantDocRef, profileDataToSave, { merge: true });
 
       toast({
         title: "¡Perfil Guardado!",
         description: "La información de tu restaurante ha sido guardada exitosamente.",
       });
       
-      // Reset form with new data to make it not dirty
       reset({ 
         restaurantName: data.restaurantName,
         location: data.location,
         description: data.description,
-        profileImageFile: undefined // Clear the file input state
+        profileImageFile: undefined
       });
-      setImageFile(null); // Clear the image file state
-      if(uploadedImageUrl) setImagePreview(uploadedImageUrl); // Update preview with potentially new URL
-      setProfileExistsAndLoaded(true); // Ensure "Mis Platos" shows
+      setImageFile(null);
       
-    } catch (error) {
+      setCurrentImageUrl(imageUrlForFirestore); // Update currentImageUrl state
+      if (imageUrlForFirestore) {
+        setImagePreview(imageUrlForFirestore);
+      } else {
+        setImagePreview("https://placehold.co/128x128.png?text=Logo");
+      }
+      setProfileExistsAndLoaded(true);
+      
+    } catch (error: any) {
       console.error("Error saving profile:", error);
       toast({
         variant: "destructive",
         title: "Error al guardar",
-        description: "No se pudo guardar la información del restaurante.",
+        description: error.message || "No se pudo guardar la información del restaurante.",
       });
     }
   }
@@ -213,10 +222,11 @@ export default function RestaurantProfilePage() {
   if (isSubmitting) {
     buttonText = "Guardando...";
     ButtonIcon = Loader2;
-  } else if (isSubmitSuccessful && !isDirty) {
+  } else if (isSubmitSuccessful && !isDirty && !imageFile) { // Added !imageFile to condition
     buttonText = "Cambios Guardados";
     ButtonIcon = Check;
   }
+
 
   if (isLoadingProfile) {
     return (
@@ -284,7 +294,6 @@ export default function RestaurantProfilePage() {
                             accept="image/png, image/jpeg, image/webp"
                             className="sr-only" 
                             onChange={handleImageChange}
-                            // No 'ref' or 'value' needed here directly from field, onChange handles it
                           />
                         </FormControl>
                         <FormDescription className="mt-2 text-center">
@@ -389,6 +398,3 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
-
-
-    
