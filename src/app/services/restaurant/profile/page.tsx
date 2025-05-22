@@ -165,7 +165,6 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    // uploadedImageUrlOutcome is already string | null here
     const imageUrlForFirestore = uploadedImageUrlOutcome; 
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
@@ -424,16 +423,7 @@ export default function RestaurantProfilePage() {
             {/* Dishes Grid Section */}
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                {[
-                  { name: "Filete Mignon Clásico", desc: "Con salsa de champiñones y puré rústico.", price: "RD$950", img: "https://placehold.co/600x400.png", hint: "steak mushroom" },
-                  { name: "Pasta Cremosa con Pollo", desc: "Pechuga a la parrilla sobre fettuccine alfredo.", price: "RD$680", img: "https://placehold.co/600x400.png", hint: "pasta chicken" },
-                  { name: "Steak con Patatas", desc: "Jugoso corte de res con patatas doradas.", price: "RD$890", img: "https://placehold.co/600x400.png", hint: "steak potatoes" },
-                  { name: "Ribeye a la Parrilla", desc: "Corte premium con guarnición de temporada.", price: "RD$1200", img: "https://placehold.co/600x400.png", hint: "ribeye steak" },
-                  { name: "Delicia de Salmón", desc: "Salmón fresco al horno con espárragos.", price: "RD$750", img: "https://placehold.co/600x400.png", hint: "salmon asparagus" },
-                  { name: "Camarones al Ajillo", desc: "Exquisitos camarones en salsa de ajo.", price: "RD$720", img: "https://placehold.co/600x400.png", hint: "shrimp garlic" },
-                  { name: "Hamburguesa Gourmet", desc: "Carne angus, queso cheddar y pan artesanal.", price: "RD$550", img: "https://placehold.co/600x400.png", hint: "burger gourmet" },
-                  { name: "Tacos de Birria", desc: "Tradicionales tacos mexicanos con consomé.", price: "RD$450", img: "https://placehold.co/600x400.png", hint: "tacos birria" },
-                ].map((dish, i) => (
+                {[].map((dish: any, i: number) => ( // Empty array here
                   <Card key={i} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col">
                     <div className="aspect-[4/3] w-full overflow-hidden">
                       <Image
@@ -489,3 +479,5 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
+
+    
