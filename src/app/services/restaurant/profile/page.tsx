@@ -49,10 +49,12 @@ interface RestaurantDocument {
   updatedAt: Timestamp;
 }
 
+const DEFAULT_PLACEHOLDER_IMAGE = "https://placehold.co/128x128.png";
+
 export default function RestaurantProfilePage() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [imagePreview, setImagePreview] = useState<string | null>("https://placehold.co/128x128.png?text=Logo");
+  const [imagePreview, setImagePreview] = useState<string | null>(DEFAULT_PLACEHOLDER_IMAGE);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileExistsAndLoaded, setProfileExistsAndLoaded] = useState(false);
@@ -73,7 +75,7 @@ export default function RestaurantProfilePage() {
   const fetchProfile = useCallback(async () => {
     if (!user) {
       setIsLoadingProfile(false);
-      setIsEditing(true); // No user, force edit mode (though saving will be disabled)
+      setIsEditing(true); 
       return;
     }
     setIsLoadingProfile(true);
@@ -92,16 +94,16 @@ export default function RestaurantProfilePage() {
           setImagePreview(data.imageUrl);
           setCurrentImageUrl(data.imageUrl);
         } else {
-          setImagePreview("https://placehold.co/128x128.png?text=Logo");
+          setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
           setCurrentImageUrl(null);
         }
         setProfileExistsAndLoaded(true);
-        setIsEditing(false); // Default to display mode if profile exists
+        setIsEditing(false); 
       } else {
         setProfileExistsAndLoaded(false);
-        setImagePreview("https://placehold.co/128x128.png?text=Logo");
+        setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
         setCurrentImageUrl(undefined);
-        setIsEditing(true); // No profile, force edit mode
+        setIsEditing(true); 
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -110,7 +112,7 @@ export default function RestaurantProfilePage() {
         title: "Error al cargar el perfil",
         description: "No se pudo cargar la información de tu restaurante.",
       });
-      setIsEditing(true); // Fallback to edit mode on error
+      setIsEditing(true); 
     } finally {
       setIsLoadingProfile(false);
     }
@@ -133,7 +135,7 @@ export default function RestaurantProfilePage() {
       setValue('profileImageFile', event.target.files, { shouldDirty: true });
     } else {
       setImageFile(null);
-      setImagePreview(currentImageUrl || "https://placehold.co/128x128.png?text=Logo");
+      setImagePreview(currentImageUrl || DEFAULT_PLACEHOLDER_IMAGE);
       setValue('profileImageFile', undefined, { shouldDirty: true });
     }
   };
@@ -163,7 +165,8 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
+    // uploadedImageUrlOutcome is already string | null here
+    const imageUrlForFirestore = uploadedImageUrlOutcome; 
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -199,10 +202,10 @@ export default function RestaurantProfilePage() {
       if (imageUrlForFirestore) {
         setImagePreview(imageUrlForFirestore);
       } else {
-        setImagePreview("https://placehold.co/128x128.png?text=Logo");
+        setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
       }
       setProfileExistsAndLoaded(true);
-      setIsEditing(false); // Switch to display mode after successful save
+      setIsEditing(false); 
       
     } catch (error: any) {
       console.error("Error saving profile:", error);
@@ -354,10 +357,10 @@ export default function RestaurantProfilePage() {
                   />
                 </CardContent>
                 <CardFooter className="flex flex-col sm:flex-row gap-2 justify-end">
-                  {profileExistsAndLoaded && ( // Show cancel only if a profile already exists and we are editing it
+                  {profileExistsAndLoaded && ( 
                     <Button type="button" variant="outline" onClick={() => {
                       setIsEditing(false);
-                      fetchProfile(); // Resets form to last saved state if user cancels
+                      fetchProfile(); 
                     }}>
                       Cancelar
                     </Button>
@@ -389,7 +392,7 @@ export default function RestaurantProfilePage() {
               </Button>
               <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-6 sm:gap-8">
                 <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-md shrink-0">
-                  <AvatarImage src={imagePreview || "https://placehold.co/150x150.png?text=Logo"} alt={getValues("restaurantName")} data-ai-hint="restaurant logo" />
+                  <AvatarImage src={imagePreview || DEFAULT_PLACEHOLDER_IMAGE} alt={getValues("restaurantName")} data-ai-hint="restaurant logo" />
                   <AvatarFallback className="text-4xl"><Building /></AvatarFallback>
                 </Avatar>
                 <div className="flex-grow">
@@ -464,8 +467,6 @@ export default function RestaurantProfilePage() {
             </Button>
           </div>
         ) : (
-           // Fallback: If not editing and profile doesn't exist (should be rare after fetchProfile logic)
-           // Or if user is null and initial loading is done
            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8">
              <Building className="h-16 w-16 text-muted-foreground mb-4" />
              <p className="text-lg text-muted-foreground mb-4">
@@ -474,7 +475,7 @@ export default function RestaurantProfilePage() {
              {user && (
                 <Button onClick={() => {
                     reset({ restaurantName: "", location: "", description: "" }); 
-                    setImagePreview("https://placehold.co/128x128.png?text=Logo");
+                    setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
                     setCurrentImageUrl(undefined);
                     setImageFile(null);
                     setIsEditing(true);
@@ -488,5 +489,3 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
-
-    
