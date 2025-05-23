@@ -22,11 +22,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, Utensils, Trash2 } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, Utensils, Trash2, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs, deleteDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; // Corrected import: refFromURL removed
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import AddDishForm, { type DishFormData, dishCategories } from "@/components/services/restaurant/add-dish-form";
@@ -40,13 +40,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"; // For map modal
+import RestaurantLocationMap from "@/components/services/restaurant/RestaurantLocationMap";
 
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
-  location: z.string().min(5, { message: "La ubicación debe tener al menos 5 caracteres." }),
+  address: z.string().min(5, { message: "La dirección debe tener al menos 5 caracteres." }),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(300, { message: "La descripción no puede exceder los 300 caracteres." }),
   profileImageFile: z.any().optional(),
 });
@@ -55,7 +58,9 @@ type RestaurantProfileFormData = z.infer<typeof restaurantProfileSchema>;
 
 interface RestaurantDocument {
   restaurantName: string;
-  location: string;
+  address: string;
+  latitude?: number | null;
+  longitude?: number | null;
   description: string;
   imageUrl?: string | null;
   ownerId: string;
@@ -65,6 +70,8 @@ interface RestaurantDocument {
 
 const DEFAULT_PLACEHOLDER_IMAGE = "https://placehold.co/128x128.png";
 const DEFAULT_DISH_PLACEHOLDER_IMAGE = "https://placehold.co/400x300.png";
+
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 export default function RestaurantProfilePage() {
   const { toast } = useToast();
@@ -84,17 +91,23 @@ export default function RestaurantProfilePage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [dishToDelete, setDishToDelete] = useState<RestaurantDish | null>(null);
 
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+
 
   const form = useForm<RestaurantProfileFormData>({
     resolver: zodResolver(restaurantProfileSchema),
     defaultValues: {
       restaurantName: "",
-      location: "",
+      address: "",
+      latitude: null,
+      longitude: null,
       description: "",
     },
   });
 
-  const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues } = form;
+  const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues, watch } = form;
+  const currentLat = watch("latitude");
+  const currentLng = watch("longitude");
 
   const fetchDishes = useCallback(async (userId: string) => {
     if (!user) {
@@ -109,8 +122,8 @@ export default function RestaurantProfilePage() {
       const q = query(dishesColRef, orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedDishes: RestaurantDish[] = [];
-      querySnapshot.forEach((doc) => {
-        fetchedDishes.push({ id: doc.id, ...doc.data() } as RestaurantDish);
+      querySnapshot.forEach((docSnap) => {
+        fetchedDishes.push({ id: docSnap.id, ...docSnap.data() } as RestaurantDish);
       });
       setDishesData(fetchedDishes);
     } catch (error) {
@@ -136,7 +149,9 @@ export default function RestaurantProfilePage() {
         const data = docSnap.data() as RestaurantDocument;
         reset({
           restaurantName: data.restaurantName,
-          location: data.location,
+          address: data.address,
+          latitude: data.latitude || null,
+          longitude: data.longitude || null,
           description: data.description,
         });
         if (data.imageUrl) {
@@ -152,18 +167,18 @@ export default function RestaurantProfilePage() {
       } else {
         setProfileExistsAndLoaded(false);
         setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
-        setCurrentImageUrl(undefined); // Use undefined to clearly indicate no URL from DB
+        setCurrentImageUrl(undefined); 
         setIsEditing(true); 
-        setDishesData([]); // No profile, so no dishes
+        setDishesData([]); 
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
       toast({
         variant: "destructive",
         title: "Error al cargar el perfil",
-        description: (error as any).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase o la consola del navegador para más detalles.",
+        description: (error as Error).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase o la consola del navegador para más detalles.",
       });
-      setIsEditing(true); // Allow user to create a profile if fetching failed
+      setIsEditing(true); 
     } finally {
       setIsLoadingProfile(false);
     }
@@ -186,7 +201,6 @@ export default function RestaurantProfilePage() {
       setValue('profileImageFile', file, { shouldDirty: true });
     } else {
       setImageFile(null);
-      // Revert to current DB image or default placeholder if no DB image and no new file
       setImagePreview(currentImageUrl || DEFAULT_PLACEHOLDER_IMAGE);
       setValue('profileImageFile', undefined, { shouldDirty: true });
     }
@@ -210,7 +224,7 @@ export default function RestaurantProfilePage() {
         toast({
           variant: "destructive",
           title: "Error al subir imagen",
-          description: (error as any).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase Storage o la consola del navegador para más detalles.",
+          description: (error as Error).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase Storage o la consola del navegador para más detalles.",
         });
         return; 
       }
@@ -222,7 +236,9 @@ export default function RestaurantProfilePage() {
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
       restaurantName: data.restaurantName,
-      location: data.location,
+      address: data.address,
+      latitude: data.latitude,
+      longitude: data.longitude,
       description: data.description,
       imageUrl: imageUrlForFirestore, 
       updatedAt: serverTimestamp(),
@@ -243,7 +259,9 @@ export default function RestaurantProfilePage() {
       
       reset({ 
         restaurantName: data.restaurantName,
-        location: data.location,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
         description: data.description,
         profileImageFile: undefined 
       });
@@ -266,7 +284,7 @@ export default function RestaurantProfilePage() {
       toast({
         variant: "destructive",
         title: "Error al guardar perfil",
-        description: (error as any).message || "No se pudo guardar la información del restaurante. Verifique los permisos de Firestore o la consola del navegador para más detalles.",
+        description: (error as Error).message || "No se pudo guardar la información del restaurante. Verifique los permisos de Firestore o la consola del navegador para más detalles.",
       });
     }
   }
@@ -325,7 +343,7 @@ export default function RestaurantProfilePage() {
       toast({ 
         variant: "destructive", 
         title: "Error al Añadir Plato", 
-        description: (error as any).message || "No se pudo guardar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
+        description: (error as Error).message || "No se pudo guardar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
       });
     }
   };
@@ -366,7 +384,7 @@ export default function RestaurantProfilePage() {
       toast({ 
         variant: "destructive", 
         title: "Error al Eliminar Plato", 
-        description: (error as any).message || "No se pudo eliminar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
+        description: (error as Error).message || "No se pudo eliminar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
       });
     } finally {
       setIsDeleteDialogOpen(false);
@@ -383,6 +401,15 @@ export default function RestaurantProfilePage() {
     ? dishesData.filter(dish => dish.category === selectedCategoryFilter)
     : dishesData;
 
+  const handleLocationSelectedFromMap = (location: { lat: number; lng: number; address?: string }) => {
+    setValue('latitude', location.lat, { shouldDirty: true });
+    setValue('longitude', location.lng, { shouldDirty: true });
+    if (location.address) {
+      setValue('address', location.address, { shouldDirty: true });
+    }
+    setIsMapModalOpen(false);
+    toast({ title: "Ubicación Seleccionada", description: `Lat: ${location.lat.toFixed(4)}, Lng: ${location.lng.toFixed(4)}`});
+  };
 
   let buttonText = "Guardar Cambios";
   let ButtonIcon = Save;
@@ -479,21 +506,73 @@ export default function RestaurantProfilePage() {
                     )}
                   />
                   <FormField
-                    control={control}
-                    name="location"
+                    control={form.control}
+                    name="address"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-md flex items-center gap-1"><MapPin className="h-4 w-4" />Ubicación Exacta</FormLabel>
+                        <FormLabel className="text-md flex items-center gap-1"><MapPin className="h-4 w-4" />Dirección (Calle, Número, Sector, Ciudad)</FormLabel>
                         <FormControl>
                           <Input placeholder="Ej: Av. Independencia #123, Santo Domingo" {...field} className="text-base" />
                         </FormControl>
-                        <FormDescription>
-                          Incluye calle, número y ciudad.
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="latitude"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">Latitud</FormLabel>
+                          <FormControl>
+                            <Input type="number" readOnly placeholder="Se autocompletará con el mapa" {...field} value={field.value ?? ""} className="bg-muted/50" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="longitude"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">Longitud</FormLabel>
+                          <FormControl>
+                            <Input type="number" readOnly placeholder="Se autocompletará con el mapa" {...field} value={field.value ?? ""} className="bg-muted/50" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <Dialog open={isMapModalOpen} onOpenChange={setIsMapModalOpen}>
+                    <DialogTrigger asChild>
+                       <Button type="button" variant="outline" className="w-full">
+                        <MapPin className="mr-2 h-4 w-4" /> Fijar Ubicación en Mapa
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Selecciona la Ubicación de tu Restaurante</DialogTitle>
+                        <DialogDescription>
+                          Busca tu dirección o haz clic en el mapa para colocar un marcador. Arrastra el marcador para ajustar.
+                        </DialogDescription>
+                      </DialogHeader>
+                      {GOOGLE_MAPS_API_KEY ? (
+                        <RestaurantLocationMap
+                          apiKey={GOOGLE_MAPS_API_KEY}
+                          initialLat={currentLat}
+                          initialLng={currentLng}
+                          onLocationSelect={handleLocationSelectedFromMap}
+                          setMapManuallyClosed={setIsMapModalOpen}
+                        />
+                      ) : (
+                        <p className="text-destructive text-center py-4">La clave API de Google Maps no está configurada. Por favor, añádela a tus variables de entorno.</p>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+
                   <FormField
                     control={control}
                     name="description"
@@ -539,7 +618,6 @@ export default function RestaurantProfilePage() {
         ) : ( 
           // DISPLAY VIEW (Profile exists and not editing)
           <div className="w-full max-w-5xl mx-auto">
-            {/* Profile Header Display */}
             <div className="bg-muted/70 dark:bg-muted/40 p-6 md:p-8 rounded-xl shadow-lg mb-10 relative">
               <Button
                 variant="outline"
@@ -557,14 +635,27 @@ export default function RestaurantProfilePage() {
                 <div className="flex-grow">
                   <h1 className="text-3xl md:text-4xl font-bold text-primary break-words">{getValues("restaurantName") || "Nombre no disponible"}</h1>
                   <p className="text-md text-foreground/80 mt-1.5 flex items-center justify-center sm:justify-start">
-                    <MapPin className="h-4 w-4 mr-1.5 shrink-0" /> {getValues("location") || "Ubicación no disponible"}
+                    <MapPin className="h-4 w-4 mr-1.5 shrink-0" /> {getValues("address") || "Dirección no disponible"}
                   </p>
+                   {(getValues("latitude") && getValues("longitude")) && (
+                     <p className="text-xs text-foreground/70 mt-0.5 flex items-center justify-center sm:justify-start">
+                        (Lat: {getValues("latitude")?.toFixed(4)}, Lng: {getValues("longitude")?.toFixed(4)})
+                        <a 
+                            href={`https://www.google.com/maps?q=${getValues("latitude")},${getValues("longitude")}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="ml-2 text-primary hover:underline"
+                            title="Ver en Google Maps"
+                        >
+                           <ExternalLink className="h-3 w-3"/>
+                        </a>
+                    </p>
+                   )}
                   <p className="text-sm text-foreground/90 mt-2 max-w-prose mx-auto sm:mx-0">{getValues("description") || "Descripción no disponible"}</p>
                 </div>
               </div>
             </div>
 
-            {/* Category Filters */}
             <div className="mb-10">
               <ScrollArea className="w-full whitespace-nowrap pb-2.5">
                 <div className="flex items-center space-x-3">
@@ -584,7 +675,6 @@ export default function RestaurantProfilePage() {
               </ScrollArea>
             </div>
 
-            {/* Dishes Grid Section */}
             <div>
               {isLoadingDishes ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
@@ -642,7 +732,6 @@ export default function RestaurantProfilePage() {
               )}
             </div>
 
-            {/* Floating Action Button to Add Dish */}
             <Button
               variant="default"
               size="lg" 
@@ -656,7 +745,6 @@ export default function RestaurantProfilePage() {
           </div>
         )}
       </div>
-      {/* Add Dish Modal - Rendered only if profile is loaded and user exists */}
       {profileExistsAndLoaded && user && (
           <AddDishForm 
             isOpen={isAddDishModalOpen} 
@@ -664,7 +752,6 @@ export default function RestaurantProfilePage() {
             onDishAdd={handleDishAdded}
           />
       )}
-      {/* Delete Dish Confirmation Dialog */}
       {dishToDelete && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent>
@@ -687,5 +774,3 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
-
-    
