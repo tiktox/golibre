@@ -26,7 +26,7 @@ import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, E
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs, deleteDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject, refFromURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; // Corrected import: refFromURL removed
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import AddDishForm, { type DishFormData, dishCategories } from "@/components/services/restaurant/add-dish-form";
@@ -97,6 +97,11 @@ export default function RestaurantProfilePage() {
   const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues } = form;
 
   const fetchDishes = useCallback(async (userId: string) => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para ver los platos." });
+      setIsLoadingDishes(false);
+      return;
+    }
     if (!userId) return;
     setIsLoadingDishes(true);
     try {
@@ -114,7 +119,7 @@ export default function RestaurantProfilePage() {
     } finally {
       setIsLoadingDishes(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   const fetchProfile = useCallback(async () => {
     if (!user) {
@@ -147,9 +152,9 @@ export default function RestaurantProfilePage() {
       } else {
         setProfileExistsAndLoaded(false);
         setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
-        setCurrentImageUrl(undefined);
+        setCurrentImageUrl(undefined); // Use undefined to clearly indicate no URL from DB
         setIsEditing(true); 
-        setDishesData([]);
+        setDishesData([]); // No profile, so no dishes
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -158,7 +163,7 @@ export default function RestaurantProfilePage() {
         title: "Error al cargar el perfil",
         description: (error as any).message || "No se pudo cargar la información de tu restaurante. Verifique los permisos de Firebase o la consola del navegador para más detalles.",
       });
-      setIsEditing(true); 
+      setIsEditing(true); // Allow user to create a profile if fetching failed
     } finally {
       setIsLoadingProfile(false);
     }
@@ -181,6 +186,7 @@ export default function RestaurantProfilePage() {
       setValue('profileImageFile', file, { shouldDirty: true });
     } else {
       setImageFile(null);
+      // Revert to current DB image or default placeholder if no DB image and no new file
       setImagePreview(currentImageUrl || DEFAULT_PLACEHOLDER_IMAGE);
       setValue('profileImageFile', undefined, { shouldDirty: true });
     }
@@ -192,9 +198,9 @@ export default function RestaurantProfilePage() {
       return;
     }
 
-    let uploadedImageUrlOutcome: string | null = currentImageUrl === undefined ? null : currentImageUrl;
+    let uploadedImageUrlOutcome: string | null = currentImageUrl === undefined ? null : currentImageUrl; 
 
-    if (imageFile) {
+    if (imageFile) { 
       const storageRef = ref(storage, `restaurants/${user.uid}/profileImage/${imageFile.name}-${Date.now()}`);
       try {
         const snapshot = await uploadBytes(storageRef, imageFile);
@@ -206,13 +212,12 @@ export default function RestaurantProfilePage() {
           title: "Error al subir imagen",
           description: (error as any).message || "No se pudo guardar la imagen de perfil. Verifique los permisos de Firebase Storage o la consola del navegador para más detalles.",
         });
-        return;
+        return; 
       }
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome;
-
+    const imageUrlForFirestore = uploadedImageUrlOutcome; 
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -240,19 +245,19 @@ export default function RestaurantProfilePage() {
         restaurantName: data.restaurantName,
         location: data.location,
         description: data.description,
-        profileImageFile: undefined
+        profileImageFile: undefined 
       });
-      setImageFile(null);
+      setImageFile(null); 
       
-      setCurrentImageUrl(imageUrlForFirestore);
+      setCurrentImageUrl(imageUrlForFirestore); 
       if (imageUrlForFirestore) {
         setImagePreview(imageUrlForFirestore);
       } else {
-        setImagePreview(DEFAULT_PLACEHOLDER_IMAGE);
+        setImagePreview(DEFAULT_PLACEHOLDER_IMAGE); 
       }
       setProfileExistsAndLoaded(true);
       setIsEditing(false); 
-      if (!docSnap.exists()) { // If it was a new profile, fetch dishes (which might be empty)
+      if (!docSnap.exists()) { 
         await fetchDishes(user.uid);
       }
       
@@ -273,7 +278,7 @@ export default function RestaurantProfilePage() {
     }
     if (!profileExistsAndLoaded) {
         toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante para poder añadir platos." });
-        setIsEditing(true); // Encourage saving profile first
+        setIsEditing(true); 
         return;
     }
     setIsAddDishModalOpen(true);
@@ -314,7 +319,7 @@ export default function RestaurantProfilePage() {
         description: `El plato "${dishData.title}" ha sido añadido a tu menú.`,
       });
       setIsAddDishModalOpen(false);
-      await fetchDishes(user.uid); // Refresh the dishes list
+      await fetchDishes(user.uid); 
     } catch (error) {
       console.error("Error adding dish:", error);
       toast({ 
@@ -334,20 +339,17 @@ export default function RestaurantProfilePage() {
     const { id: dishId, imageUrl } = dishToDelete;
 
     try {
-      // Delete Firestore document
       const dishDocRef = doc(db, "restaurants", user.uid, "dishes", dishId);
       await deleteDoc(dishDocRef);
 
-      // Delete image from Storage if it exists and is a Firebase Storage URL
       if (imageUrl && imageUrl.startsWith("https://firebasestorage.googleapis.com")) {
         try {
-          const imageStorageRef = refFromURL(storage, imageUrl);
+          const imageStorageRef = ref(storage, imageUrl); 
           await deleteObject(imageStorageRef);
         } catch (storageError) {
-          // Log storage error but don't block Firestore deletion success
           console.error("Error deleting image from Storage:", storageError);
           toast({
-            variant: "default", // Not destructive, as main operation (Firestore delete) might succeed
+            variant: "default", 
             title: "Advertencia al Eliminar Imagen",
             description: "El plato se eliminó de la base de datos, pero hubo un problema al eliminar la imagen asociada del almacenamiento. Puede que necesites eliminarla manualmente.",
           });
@@ -358,7 +360,7 @@ export default function RestaurantProfilePage() {
         title: "¡Plato Eliminado!",
         description: `El plato "${dishToDelete.title}" ha sido eliminado de tu menú.`,
       });
-      await fetchDishes(user.uid); // Refresh the dishes list
+      await fetchDishes(user.uid); 
     } catch (error) {
       console.error("Error deleting dish:", error);
       toast({ 
@@ -388,10 +390,10 @@ export default function RestaurantProfilePage() {
   if (isSubmitting) {
     buttonText = "Guardando...";
     ButtonIcon = Loader2;
-  } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded && isEditing) {
+  } else if (isSubmitSuccessful && !isDirty && !imageFile && profileExistsAndLoaded && isEditing) { 
     buttonText = "Cambios Guardados";
     ButtonIcon = Check;
-  } else if (!profileExistsAndLoaded && !isDirty && isEditing) { // Initial state for new profile
+  } else if (!profileExistsAndLoaded && !isDirty && isEditing) { 
     buttonText = "Crear Perfil";
   }
 
@@ -436,7 +438,7 @@ export default function RestaurantProfilePage() {
                 <CardContent className="space-y-6">
                   <FormField
                     control={control}
-                    name="profileImageFile"
+                    name="profileImageFile" 
                     render={({ fieldState: imageFieldState }) => ( 
                       <FormItem className="flex flex-col items-center">
                         <FormLabel htmlFor="profile-image-upload" className="cursor-pointer">
@@ -535,7 +537,9 @@ export default function RestaurantProfilePage() {
             </Form>
           </Card>
         ) : ( 
+          // DISPLAY VIEW (Profile exists and not editing)
           <div className="w-full max-w-5xl mx-auto">
+            {/* Profile Header Display */}
             <div className="bg-muted/70 dark:bg-muted/40 p-6 md:p-8 rounded-xl shadow-lg mb-10 relative">
               <Button
                 variant="outline"
@@ -560,6 +564,7 @@ export default function RestaurantProfilePage() {
               </div>
             </div>
 
+            {/* Category Filters */}
             <div className="mb-10">
               <ScrollArea className="w-full whitespace-nowrap pb-2.5">
                 <div className="flex items-center space-x-3">
@@ -579,6 +584,7 @@ export default function RestaurantProfilePage() {
               </ScrollArea>
             </div>
 
+            {/* Dishes Grid Section */}
             <div>
               {isLoadingDishes ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
@@ -636,10 +642,11 @@ export default function RestaurantProfilePage() {
               )}
             </div>
 
+            {/* Floating Action Button to Add Dish */}
             <Button
               variant="default"
               size="lg" 
-              className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
+              className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0" 
               onClick={handleOpenAddDishModal}
               aria-label="Añadir Plato"
               disabled={!profileExistsAndLoaded || isSubmitting || !user} 
@@ -649,6 +656,7 @@ export default function RestaurantProfilePage() {
           </div>
         )}
       </div>
+      {/* Add Dish Modal - Rendered only if profile is loaded and user exists */}
       {profileExistsAndLoaded && user && (
           <AddDishForm 
             isOpen={isAddDishModalOpen} 
@@ -656,6 +664,7 @@ export default function RestaurantProfilePage() {
             onDishAdd={handleDishAdded}
           />
       )}
+      {/* Delete Dish Confirmation Dialog */}
       {dishToDelete && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <AlertDialogContent>
@@ -678,6 +687,5 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
-
 
     
