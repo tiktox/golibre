@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import LogoIcon from '@/components/icons/logo';
 
@@ -42,19 +42,20 @@ type SignUpFormData = z.infer<typeof signUpSchema>;
 export default function AuthPage() {
   const { user, signIn, signUp, loading: authLoading, isInitializing } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Get search params
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
      if (!isInitializing && !authLoading && user) {
-      // If auth is initialized, not actively loading, and user object exists,
-      // it means authentication was successful. Redirect to the main dashboard.
-      // The role ('customer' by default, treated as 'driver') is handled by AuthContext
-      // and protected routes.
-      router.replace('/driver/dashboard');
+      const nextUrl = searchParams.get('next');
+      if (nextUrl) {
+        router.replace(nextUrl);
+      } else {
+        router.replace('/driver/dashboard');
+      }
     }
-    // If user is null, no redirect happens, auth form stays.
-  }, [user, authLoading, isInitializing, router]);
+  }, [user, authLoading, isInitializing, router, searchParams]);
 
   const signInForm = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),

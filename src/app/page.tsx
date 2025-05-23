@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Car } from 'lucide-react'; // Removed Users icon
+import { Car } from 'lucide-react'; 
 
 export default function HomePage() {
   const { user, role, loading, isInitializing } = useAuth();
@@ -15,10 +15,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!isInitializing && !loading) {
       if (user && role) {
-        // If user has a role, redirect to driver dashboard regardless of role for now
         router.replace('/driver/dashboard');
       } else if (user && !role) {
-        // Role selection page will handle setting default role and redirecting
         router.replace('/role-selection'); 
       }
     }
@@ -47,7 +45,7 @@ export default function HomePage() {
           <p className="text-lg font-medium text-foreground">Únete o inicia sesión:</p>
           <div className="grid grid-cols-1 gap-4">
             <Button 
-              onClick={() => router.push('/auth')} 
+              onClick={() => router.push('/driver/dashboard')} // Changed to redirect to service selection
               variant="secondary" 
               size="lg" 
               className="w-full py-6 text-lg"
@@ -57,11 +55,10 @@ export default function HomePage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Serás redirigido para iniciar sesión o registrarte.
+            Explora los servicios que puedes ofrecer.
           </p>
         </div>
       ) : !role ? (
-         // This state should be transient, role-selection page will handle it
         <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
           Configurar Cuenta
         </Button>
