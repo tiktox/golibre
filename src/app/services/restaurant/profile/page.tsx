@@ -231,7 +231,7 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome; 
+    const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -366,6 +366,7 @@ export default function RestaurantProfilePage() {
           await deleteObject(imageStorageRef);
         } catch (storageError) {
           console.error("Error deleting image from Storage:", storageError);
+          // Non-fatal, proceed with UI update but notify user
           toast({
             variant: "default", 
             title: "Advertencia al Eliminar Imagen",
@@ -774,3 +775,5 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
+
+    
