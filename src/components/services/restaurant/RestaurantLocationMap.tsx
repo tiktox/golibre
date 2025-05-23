@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from 'react'; // Added React import
 import type { Dispatch, SetStateAction } from 'react';
 import { useState, useCallback, useMemo } from 'react';
 import { GoogleMap, LoadScriptNext, Marker } from '@react-google-maps/api';
