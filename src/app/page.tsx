@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Car } from 'lucide-react'; 
+import { Briefcase } from 'lucide-react'; // Changed from Car to Briefcase
 
 export default function HomePage() {
   const { user, role, loading, isInitializing } = useAuth();
@@ -15,10 +15,13 @@ export default function HomePage() {
   useEffect(() => {
     if (!isInitializing && !loading) {
       if (user && role) {
+        // If user is logged in and has a role, redirect to the multiservice dashboard
         router.replace('/driver/dashboard');
       } else if (user && !role) {
+        // If user is logged in but has no role, redirect to role selection (which should auto-assign and redirect)
         router.replace('/role-selection'); 
       }
+      // If no user, they stay on the homepage to see the "Ofrecer servicios" button
     }
   }, [user, role, loading, router, isInitializing]);
 
@@ -45,13 +48,13 @@ export default function HomePage() {
           <p className="text-lg font-medium text-foreground">Únete o inicia sesión:</p>
           <div className="grid grid-cols-1 gap-4">
             <Button 
-              onClick={() => router.push('/driver/dashboard')} // Changed to redirect to service selection
+              onClick={() => router.push('/driver/dashboard')} 
               variant="secondary" 
               size="lg" 
               className="w-full py-6 text-lg"
             >
-              <Car className="mr-3 h-6 w-6" />
-              Formo parte de Golibre
+              <Briefcase className="mr-3 h-6 w-6" /> {/* Changed icon */}
+              Ofrecer servicios {/* Changed text */}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
@@ -59,6 +62,7 @@ export default function HomePage() {
           </p>
         </div>
       ) : !role ? (
+        // This case should be rare if role selection automatically assigns a role
         <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
           Configurar Cuenta
         </Button>
