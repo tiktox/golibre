@@ -22,15 +22,27 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProtectedRoute from "@/components/protected-route";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, Utensils } from "lucide-react";
+import { Camera, Building, MapPin, FileText, Save, Check, Loader2, PlusCircle, Edit3, Plus, Utensils, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { db, storage } from "@/lib/firebase";
-import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, setDoc, getDoc, serverTimestamp, type Timestamp, collection, addDoc, query, orderBy, getDocs, deleteDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject, refFromURL } from "firebase/storage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import AddDishForm, { type DishFormData, dishCategories } from "@/components/services/restaurant/add-dish-form";
 import type { RestaurantDish } from "@/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
@@ -68,6 +80,9 @@ export default function RestaurantProfilePage() {
   const [dishesData, setDishesData] = useState<RestaurantDish[]>([]);
   const [isLoadingDishes, setIsLoadingDishes] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(dishCategories[0]?.value || null);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [dishToDelete, setDishToDelete] = useState<RestaurantDish | null>(null);
 
 
   const form = useForm<RestaurantProfileFormData>({
@@ -196,7 +211,8 @@ export default function RestaurantProfilePage() {
     }
     
     const restaurantDocRef = doc(db, "restaurants", user.uid);
-    const imageUrlForFirestore = uploadedImageUrlOutcome === undefined ? null : uploadedImageUrlOutcome;
+    const imageUrlForFirestore = uploadedImageUrlOutcome;
+
 
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
@@ -307,6 +323,58 @@ export default function RestaurantProfilePage() {
         description: (error as any).message || "No se pudo guardar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
       });
     }
+  };
+  
+  const handleDeleteDish = async () => {
+    if (!dishToDelete || !user) {
+      toast({ variant: "destructive", title: "Error", description: "No se pudo determinar el plato a eliminar o el usuario no está autenticado." });
+      return;
+    }
+
+    const { id: dishId, imageUrl } = dishToDelete;
+
+    try {
+      // Delete Firestore document
+      const dishDocRef = doc(db, "restaurants", user.uid, "dishes", dishId);
+      await deleteDoc(dishDocRef);
+
+      // Delete image from Storage if it exists and is a Firebase Storage URL
+      if (imageUrl && imageUrl.startsWith("https://firebasestorage.googleapis.com")) {
+        try {
+          const imageStorageRef = refFromURL(storage, imageUrl);
+          await deleteObject(imageStorageRef);
+        } catch (storageError) {
+          // Log storage error but don't block Firestore deletion success
+          console.error("Error deleting image from Storage:", storageError);
+          toast({
+            variant: "default", // Not destructive, as main operation (Firestore delete) might succeed
+            title: "Advertencia al Eliminar Imagen",
+            description: "El plato se eliminó de la base de datos, pero hubo un problema al eliminar la imagen asociada del almacenamiento. Puede que necesites eliminarla manualmente.",
+          });
+        }
+      }
+
+      toast({
+        title: "¡Plato Eliminado!",
+        description: `El plato "${dishToDelete.title}" ha sido eliminado de tu menú.`,
+      });
+      await fetchDishes(user.uid); // Refresh the dishes list
+    } catch (error) {
+      console.error("Error deleting dish:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Error al Eliminar Plato", 
+        description: (error as any).message || "No se pudo eliminar el plato. Verifique los permisos de Firebase o la consola del navegador para más detalles." 
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDishToDelete(null);
+    }
+  };
+
+  const openDeleteConfirmation = (dish: RestaurantDish) => {
+    setDishToDelete(dish);
+    setIsDeleteDialogOpen(true);
   };
   
   const filteredDishes = selectedCategoryFilter
@@ -449,7 +517,7 @@ export default function RestaurantProfilePage() {
                   {profileExistsAndLoaded && isEditing && ( 
                     <Button type="button" variant="outline" onClick={() => {
                       setIsEditing(false);
-                      fetchProfile(); // Re-fetch to reset form to last saved state
+                      fetchProfile(); 
                     }}>
                       Cancelar
                     </Button>
@@ -466,9 +534,8 @@ export default function RestaurantProfilePage() {
               </form>
             </Form>
           </Card>
-        ) : ( // DISPLAY VIEW (Only if profile exists and not editing)
+        ) : ( 
           <div className="w-full max-w-5xl mx-auto">
-            {/* Profile Header Section */}
             <div className="bg-muted/70 dark:bg-muted/40 p-6 md:p-8 rounded-xl shadow-lg mb-10 relative">
               <Button
                 variant="outline"
@@ -493,7 +560,6 @@ export default function RestaurantProfilePage() {
               </div>
             </div>
 
-            {/* Dish Categories Section */}
             <div className="mb-10">
               <ScrollArea className="w-full whitespace-nowrap pb-2.5">
                 <div className="flex items-center space-x-3">
@@ -513,11 +579,10 @@ export default function RestaurantProfilePage() {
               </ScrollArea>
             </div>
 
-            {/* Dishes Grid Section */}
             <div>
               {isLoadingDishes ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                  {[...Array(5)].map((_, i) => ( // Show 5 skeleton cards
+                  {[...Array(5)].map((_, i) => ( 
                     <Card key={i} className="overflow-hidden shadow-md rounded-lg flex flex-col">
                       <Skeleton className="aspect-[4/3] w-full" />
                       <CardContent className="p-4 flex flex-col flex-grow space-y-2">
@@ -540,7 +605,16 @@ export default function RestaurantProfilePage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
                   {filteredDishes.map((dish) => ( 
-                    <Card key={dish.id} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col group">
+                    <Card key={dish.id} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col group relative">
+                       <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 z-10 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => openDeleteConfirmation(dish)}
+                        aria-label="Eliminar plato"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                       <div className="aspect-[4/3] w-full overflow-hidden relative">
                         <Image
                           src={dish.imageUrl || DEFAULT_DISH_PLACEHOLDER_IMAGE}
@@ -568,14 +642,13 @@ export default function RestaurantProfilePage() {
               className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0"
               onClick={handleOpenAddDishModal}
               aria-label="Añadir Plato"
-              disabled={!profileExistsAndLoaded || isSubmitting || !user} // Disable if no profile or submitting or no user
+              disabled={!profileExistsAndLoaded || isSubmitting || !user} 
             >
               <Plus className="h-7 w-7" />
             </Button>
           </div>
         )}
       </div>
-      {/* Render AddDishForm only if profile exists and user is logged in, otherwise it doesn't make sense to add dishes */}
       {profileExistsAndLoaded && user && (
           <AddDishForm 
             isOpen={isAddDishModalOpen} 
@@ -583,8 +656,28 @@ export default function RestaurantProfilePage() {
             onDishAdd={handleDishAdded}
           />
       )}
+      {dishToDelete && (
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Estás a punto de eliminar el plato: <strong>{dishToDelete.title}</strong>. 
+                Esta acción no se puede deshacer y también se eliminará la imagen asociada (si existe).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDishToDelete(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteDish} className="bg-destructive hover:bg-destructive/90">
+                Eliminar Plato
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </ProtectedRoute>
   );
 }
 
 
+    
