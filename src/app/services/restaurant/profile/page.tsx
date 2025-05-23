@@ -41,15 +41,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"; // For map modal
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import RestaurantLocationMap from "@/components/services/restaurant/RestaurantLocationMap";
 
 
 const restaurantProfileSchema = z.object({
   restaurantName: z.string().min(2, { message: "El nombre del restaurante debe tener al menos 2 caracteres." }),
-  address: z.string().min(5, { message: "La dirección debe tener al menos 5 caracteres." }),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
+  address: z.string().min(5, { message: "La dirección (obtenida del mapa) debe tener al menos 5 caracteres." }), // Address will be set by map
+  latitude: z.number({ required_error: "La latitud es requerida. Por favor, fija la ubicación en el mapa."}).nullable(),
+  longitude: z.number({ required_error: "La longitud es requerida. Por favor, fija la ubicación en el mapa."}).nullable(),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(300, { message: "La descripción no puede exceder los 300 caracteres." }),
   profileImageFile: z.any().optional(),
 });
@@ -98,16 +98,17 @@ export default function RestaurantProfilePage() {
     resolver: zodResolver(restaurantProfileSchema),
     defaultValues: {
       restaurantName: "",
-      address: "",
+      address: "", // Will be populated by map
       latitude: null,
       longitude: null,
       description: "",
     },
   });
 
-  const { formState: { isSubmitting, isDirty, isSubmitSuccessful }, control, setValue, reset, getValues, watch } = form;
+  const { formState: { isSubmitting, isDirty, isSubmitSuccessful, errors }, control, setValue, reset, getValues, watch } = form;
   const currentLat = watch("latitude");
   const currentLng = watch("longitude");
+  const currentAddress = watch("address"); // To display the address set by the map
 
   const fetchDishes = useCallback(async (userId: string) => {
     if (!user) {
@@ -162,7 +163,17 @@ export default function RestaurantProfilePage() {
           setCurrentImageUrl(null);
         }
         setProfileExistsAndLoaded(true);
-        setIsEditing(false); 
+        // If location data is missing, force editing mode to complete profile
+        if (!data.latitude || !data.longitude || !data.address) {
+          setIsEditing(true);
+          if (!data.address && (data.latitude && data.longitude)) {
+            toast({ title: "Perfil Incompleto", description: "Por favor, confirma tu dirección usando el mapa.", variant: "default"});
+          } else if (!data.latitude || !data.longitude) {
+             toast({ title: "Perfil Incompleto", description: "Por favor, fija la ubicación de tu restaurante en el mapa.", variant: "default"});
+          }
+        } else {
+          setIsEditing(false);
+        }
         await fetchDishes(user.uid);
       } else {
         setProfileExistsAndLoaded(false);
@@ -170,6 +181,7 @@ export default function RestaurantProfilePage() {
         setCurrentImageUrl(undefined); 
         setIsEditing(true); 
         setDishesData([]); 
+        toast({ title: "Bienvenido", description: "Configura el perfil de tu restaurante, incluyendo la ubicación en el mapa.", duration: 5000});
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -211,6 +223,10 @@ export default function RestaurantProfilePage() {
       toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para guardar el perfil." });
       return;
     }
+    if (data.latitude === null || data.longitude === null || !data.address) {
+        toast({ variant: "destructive", title: "Ubicación Requerida", description: "Por favor, fija la ubicación de tu restaurante en el mapa antes de guardar." });
+        return;
+    }
 
     let uploadedImageUrlOutcome: string | null = currentImageUrl === undefined ? null : currentImageUrl; 
 
@@ -236,7 +252,7 @@ export default function RestaurantProfilePage() {
     const profileDataToSave: Omit<RestaurantDocument, 'createdAt' | 'updatedAt'> & { updatedAt: any, createdAt?: any, imageUrl: string | null } = {
       ownerId: user.uid,
       restaurantName: data.restaurantName,
-      address: data.address,
+      address: data.address, // This will be set from the map
       latitude: data.latitude,
       longitude: data.longitude,
       description: data.description,
@@ -294,8 +310,8 @@ export default function RestaurantProfilePage() {
         toast({ variant: "destructive", title: "Error de Autenticación", description: "Debes iniciar sesión para añadir platos." });
         return;
     }
-    if (!profileExistsAndLoaded) {
-        toast({ variant: "default", title: "Perfil Requerido", description: "Primero guarda el perfil de tu restaurante para poder añadir platos." });
+    if (!profileExistsAndLoaded || !getValues("latitude") || !getValues("longitude")) {
+        toast({ variant: "default", title: "Perfil Incompleto", description: "Primero completa y guarda el perfil de tu restaurante (incluyendo la ubicación en el mapa) para poder añadir platos." });
         setIsEditing(true); 
         return;
     }
@@ -366,11 +382,10 @@ export default function RestaurantProfilePage() {
           await deleteObject(imageStorageRef);
         } catch (storageError) {
           console.error("Error deleting image from Storage:", storageError);
-          // Non-fatal, proceed with UI update but notify user
           toast({
             variant: "default", 
             title: "Advertencia al Eliminar Imagen",
-            description: "El plato se eliminó de la base de datos, pero hubo un problema al eliminar la imagen asociada del almacenamiento. Puede que necesites eliminarla manualmente.",
+            description: "El plato se eliminó de la base de datos, pero hubo un problema al eliminar la imagen asociada del almacenamiento. Puede que necesites eliminarla manually.",
           });
         }
       }
@@ -407,6 +422,9 @@ export default function RestaurantProfilePage() {
     setValue('longitude', location.lng, { shouldDirty: true });
     if (location.address) {
       setValue('address', location.address, { shouldDirty: true });
+    } else {
+      // If no address from map, clear or set to a default, or keep existing if preferred
+      setValue('address', `Lat: ${location.lat.toFixed(4)}, Lng: ${location.lng.toFixed(4)}`, { shouldDirty: true });
     }
     setIsMapModalOpen(false);
     toast({ title: "Ubicación Seleccionada", description: `Lat: ${location.lat.toFixed(4)}, Lng: ${location.lng.toFixed(4)}`});
@@ -437,8 +455,8 @@ export default function RestaurantProfilePage() {
               <Skeleton className="h-32 w-32 rounded-full" />
             </div>
             <Skeleton className="h-10 w-full mb-4" />
-            <Skeleton className="h-10 w-full mb-4" />
             <Skeleton className="h-20 w-full mb-6" />
+            <Skeleton className="h-12 w-full mb-4" />
             <Skeleton className="h-12 w-full" />
           </div>
         </div>
@@ -458,7 +476,7 @@ export default function RestaurantProfilePage() {
                 {profileExistsAndLoaded ? "Editar Perfil del Restaurante" : "Configura el Perfil de tu Restaurante"}
               </CardTitle>
               <CardDescription>
-                Completa los detalles para que los clientes puedan encontrarte y conocerte.
+                Completa los detalles para que los clientes puedan encontrarte y conocerte. La ubicación se fija mediante el mapa.
               </CardDescription>
             </CardHeader>
             <Form {...form}>
@@ -506,74 +524,78 @@ export default function RestaurantProfilePage() {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-md flex items-center gap-1"><MapPin className="h-4 w-4" />Dirección (Calle, Número, Sector, Ciudad)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej: Av. Independencia #123, Santo Domingo" {...field} className="text-base" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="latitude"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm">Latitud</FormLabel>
-                          <FormControl>
-                            <Input type="number" readOnly placeholder="Se autocompletará con el mapa" {...field} value={field.value ?? ""} className="bg-muted/50" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="longitude"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm">Longitud</FormLabel>
-                          <FormControl>
-                            <Input type="number" readOnly placeholder="Se autocompletará con el mapa" {...field} value={field.value ?? ""} className="bg-muted/50" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <Dialog open={isMapModalOpen} onOpenChange={setIsMapModalOpen}>
-                    <DialogTrigger asChild>
-                       <Button type="button" variant="outline" className="w-full">
-                        <MapPin className="mr-2 h-4 w-4" /> Fijar Ubicación en Mapa
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Selecciona la Ubicación de tu Restaurante</DialogTitle>
-                        <DialogDescription>
-                          Busca tu dirección o haz clic en el mapa para colocar un marcador. Arrastra el marcador para ajustar.
-                        </DialogDescription>
-                      </DialogHeader>
-                      {GOOGLE_MAPS_API_KEY ? (
-                        <RestaurantLocationMap
-                          apiKey={GOOGLE_MAPS_API_KEY}
-                          initialLat={currentLat}
-                          initialLng={currentLng}
-                          onLocationSelect={handleLocationSelectedFromMap}
-                          setMapManuallyClosed={setIsMapModalOpen}
-                        />
-                      ) : (
-                        <p className="text-destructive text-center py-4">La clave API de Google Maps no está configurada. Por favor, añádela a tus variables de entorno.</p>
-                      )}
-                    </DialogContent>
-                  </Dialog>
 
+                  {/* Location Section */}
+                  <div className="space-y-2">
+                    <FormLabel className="text-md flex items-center gap-1"><MapPin className="h-4 w-4" />Ubicación del Restaurante</FormLabel>
+                    <Dialog open={isMapModalOpen} onOpenChange={setIsMapModalOpen}>
+                      <DialogTrigger asChild>
+                         <Button type="button" variant="outline" className="w-full">
+                          <MapPin className="mr-2 h-4 w-4" /> 
+                          {currentLat && currentLng ? "Modificar Ubicación en Mapa" : "Fijar Ubicación en Mapa"}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Selecciona la Ubicación de tu Restaurante</DialogTitle>
+                          <DialogDescription>
+                            Busca o haz clic en el mapa para colocar un marcador. Arrastra el marcador para ajustar.
+                          </DialogDescription>
+                        </DialogHeader>
+                        {GOOGLE_MAPS_API_KEY ? (
+                          <RestaurantLocationMap
+                            apiKey={GOOGLE_MAPS_API_KEY}
+                            initialLat={currentLat}
+                            initialLng={currentLng}
+                            onLocationSelect={handleLocationSelectedFromMap}
+                            setMapManuallyClosed={setIsMapModalOpen}
+                          />
+                        ) : (
+                          <p className="text-destructive text-center py-4">La clave API de Google Maps no está configurada.</p>
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                    {currentAddress && (
+                        <p className="text-sm text-muted-foreground p-2 border rounded-md bg-muted/30">
+                            Dirección seleccionada: {currentAddress}
+                        </p>
+                    )}
+                     {(errors.latitude || errors.longitude || errors.address) && !currentAddress && (
+                        <p className="text-sm font-medium text-destructive">
+                            Por favor, fija la ubicación de tu restaurante usando el mapa.
+                        </p>
+                     )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                       <FormField
+                          control={form.control}
+                          name="latitude"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Latitud (auto)</FormLabel>
+                              <FormControl>
+                                <Input type="number" readOnly placeholder="Se autocompletará" {...field} value={field.value ?? ""} className="bg-muted/50 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="longitude"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Longitud (auto)</FormLabel>
+                              <FormControl>
+                                <Input type="number" readOnly placeholder="Se autocompletará" {...field} value={field.value ?? ""} className="bg-muted/50 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                    </div>
+                     <FormField name="address" control={control} render={() => <FormMessage /> } /> {/* For general address error if map fails */}
+                  </div>
+                 
                   <FormField
                     control={control}
                     name="description"
@@ -692,7 +714,7 @@ export default function RestaurantProfilePage() {
                   ))}
                 </div>
               ) : filteredDishes.length === 0 ? (
-                <div className="text-center py-10">
+                 <div className="text-center py-10">
                     <Utensils className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                     <p className="text-lg text-muted-foreground">
                       {selectedCategoryFilter ? `No hay platos en la categoría "${dishCategories.find(c=>c.value === selectedCategoryFilter)?.label || selectedCategoryFilter}".` : "Aún no has añadido ningún plato."}
@@ -701,48 +723,23 @@ export default function RestaurantProfilePage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                  {filteredDishes.map((dish) => ( 
-                    <Card key={dish.id} className="overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg flex flex-col group relative">
-                       <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-2 right-2 z-10 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => openDeleteConfirmation(dish)}
-                        aria-label="Eliminar plato"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <div className="aspect-[4/3] w-full overflow-hidden relative">
-                        <Image
-                          src={dish.imageUrl || DEFAULT_DISH_PLACEHOLDER_IMAGE}
-                          alt={dish.title}
-                          layout="fill"
-                          objectFit="cover"
-                          className="group-hover:scale-105 transition-transform duration-300"
-                          data-ai-hint={`${dish.category} food`}
-                        />
-                      </div>
-                      <CardContent className="p-4 flex flex-col flex-grow">
-                        <h3 className="font-semibold text-lg text-primary leading-tight truncate" title={dish.title}>{dish.title}</h3>
-                        <p className="text-xs text-muted-foreground mt-1 flex-grow" title={dish.description}>{dish.description}</p>
-                        <p className="text-xl font-bold text-accent mt-2">RD${dish.price.toFixed(2)}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
+                  {/* No sample dishes, this will be populated by fetched dishes */}
                 </div>
               )}
             </div>
-
-            <Button
-              variant="default"
-              size="lg" 
-              className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0" 
-              onClick={handleOpenAddDishModal}
-              aria-label="Añadir Plato"
-              disabled={!profileExistsAndLoaded || isSubmitting || !user} 
-            >
-              <Plus className="h-7 w-7" />
-            </Button>
+            
+            {profileExistsAndLoaded && getValues("latitude") && getValues("longitude") && ( // Only show add dish if profile is complete
+                <Button
+                variant="default"
+                size="lg" 
+                className="fixed bottom-6 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full shadow-xl p-0" 
+                onClick={handleOpenAddDishModal}
+                aria-label="Añadir Plato"
+                disabled={!user} 
+                >
+                <Plus className="h-7 w-7" />
+                </Button>
+            )}
           </div>
         )}
       </div>
@@ -775,5 +772,4 @@ export default function RestaurantProfilePage() {
     </ProtectedRoute>
   );
 }
-
     
