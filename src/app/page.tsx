@@ -6,23 +6,22 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import LogoIcon from '@/components/icons/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Briefcase } from 'lucide-react'; // Changed from Car to Briefcase
+import { Briefcase, User } from 'lucide-react';
 
 export default function HomePage() {
   const { user, role, loading, isInitializing } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isInitializing && !loading) {
-      if (user && role) {
-        // If user is logged in and has a role, redirect to the multiservice dashboard
+    if (!isInitializing && !loading && user && role) {
+      // If user is logged in and has a role, redirect to the appropriate dashboard
+      if (role === 'customer') {
+        router.replace('/customer/dashboard');
+      } else if (role === 'driver') {
         router.replace('/driver/dashboard');
-      } else if (user && !role) {
-        // If user is logged in but has no role, redirect to role selection (which should auto-assign and redirect)
-        router.replace('/role-selection'); 
       }
-      // If no user, they stay on the homepage to see the "Ofrecer servicios" button
     }
+    // If no user, or user without role, they stay on the homepage
   }, [user, role, loading, router, isInitializing]);
 
   if (loading || isInitializing) {
@@ -45,28 +44,56 @@ export default function HomePage() {
 
       {!user ? (
         <div className="space-y-6 mt-8 w-full max-w-md">
-          <p className="text-lg font-medium text-foreground">Únete o inicia sesión:</p>
+          <p className="text-lg font-medium text-foreground">Elige cómo quieres empezar:</p>
           <div className="grid grid-cols-1 gap-4">
+            <Button 
+              onClick={() => router.push('/auth?next=/customer/dashboard')} 
+              variant="default" 
+              size="lg" 
+              className="w-full py-6 text-lg"
+            >
+              <User className="mr-3 h-6 w-6" />
+              Soy Cliente
+            </Button>
+            <Button 
+              onClick={() => router.push('/auth?next=/driver/dashboard')} 
+              variant="secondary" 
+              size="lg" 
+              className="w-full py-6 text-lg"
+            >
+              <Briefcase className="mr-3 h-6 w-6" />
+              Ofrecer servicios
+            </Button>
+          </div>
+        </div>
+      ) : !role ? (
+        // This case should ideally lead to some role selection if not handled by auth page
+        // For now, offers same choices as non-logged in, but could be a dedicated component
+         <div className="space-y-6 mt-8 w-full max-w-md">
+          <p className="text-lg font-medium text-foreground">Completa tu configuración:</p>
+          <div className="grid grid-cols-1 gap-4">
+            <Button 
+              onClick={() => router.push('/customer/dashboard')} 
+              variant="default" 
+              size="lg" 
+              className="w-full py-6 text-lg"
+            >
+              <User className="mr-3 h-6 w-6" />
+              Continuar como Cliente
+            </Button>
             <Button 
               onClick={() => router.push('/driver/dashboard')} 
               variant="secondary" 
               size="lg" 
               className="w-full py-6 text-lg"
             >
-              <Briefcase className="mr-3 h-6 w-6" /> {/* Changed icon */}
-              Ofrecer servicios {/* Changed text */}
+              <Briefcase className="mr-3 h-6 w-6" />
+              Configurar Servicios
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Explora los servicios que puedes ofrecer.
-          </p>
         </div>
-      ) : !role ? (
-        // This case should be rare if role selection automatically assigns a role
-        <Button onClick={() => router.push('/role-selection')} variant="default" size="lg">
-          Configurar Cuenta
-        </Button>
-      ) : null}
+      ) : null }
+      {/* If user and role are set, useEffect will redirect, so nothing more needed here */}
     </div>
   );
 }

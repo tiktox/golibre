@@ -6,21 +6,19 @@ import LogoIcon from './icons/logo';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
 import { useRouter } from 'next/navigation';
-import { UserCog } from 'lucide-react';
+import { UserCog, LayoutDashboard } from 'lucide-react'; // Added LayoutDashboard
 
 export default function Header() {
   const { user, role } = useAuth();
   const router = useRouter();
 
   const getDashboardLink = () => {
-    // Always point to driver/service selection dashboard if user is logged in
-    if (user) return '/driver/dashboard';
-    return '/'; // Fallback for no user
+    if (user && role === 'customer') return '/customer/dashboard';
+    if (user && role === 'driver') return '/driver/dashboard';
+    return '/'; // Fallback for no user or no role
   };
 
   const getHeaderText = () => {
-    // If user is logged in, display "GoLibre"
-    // If not logged in, also display "GoLibre"
     return 'GoLibre';
   };
 
@@ -38,13 +36,21 @@ export default function Header() {
                 <span className="text-sm text-foreground truncate max-w-[100px] sm:max-w-[150px]" title={user.displayName || user.email || "User"}>
                   {user.displayName || user.email}
                 </span>
-                {/* Text "Miles de usuarios forman parte de nosotros" removed */}
               </div>
 
-              {/* Always show multiservice dashboard button if logged in */}
-              <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
-                <UserCog className="mr-2 h-4 w-4" /> Panel multiservicios
-              </Button>
+              {role === 'customer' && (
+                 <Button variant="ghost" size="sm" onClick={() => router.push('/customer/dashboard')} className="hidden sm:inline-flex">
+                    <LayoutDashboard className="mr-2 h-4 w-4" /> Panel Cliente
+                </Button>
+              )}
+              {/* Service provider / multiservice panel button */}
+              {/* Show this if user is a driver, or if they are a customer (they might want to offer services) */}
+              {(role === 'driver' || role === 'customer') && (
+                <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
+                  <UserCog className="mr-2 h-4 w-4" /> 
+                  {role === 'driver' ? 'Panel Servicios' : 'Ofrecer Servicios'}
+                </Button>
+              )}
             </>
           )}
           <AuthButton />

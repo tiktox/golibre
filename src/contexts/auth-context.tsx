@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // Added usePathname
 import { auth } from '@/lib/firebase'; // Firebase auth
 import { 
   onAuthStateChanged, 
@@ -28,8 +28,8 @@ interface AuthContextType {
   role: UserRole;
   loading: boolean;
   isInitializing: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<boolean>; // Returns boolean success
+  signUp: (email: string, password: string, displayName?: string) => Promise<boolean>; // Returns boolean success
   signOut: () => void;
   setRole: (role: UserRole) => void;
 }
@@ -39,10 +39,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRoleState] = useState<UserRole>(null);
-  const [loading, setLoading] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [loading, setLoading] = useState(false); // Generic loading for auth operations
+  const [isInitializing, setIsInitializing] = useState(true); // Specific for initial auth state check
   const router = useRouter();
   const { toast } = useToast();
+  const pathname = usePathname();
 
   const setAndStoreRole = useCallback((newRole: UserRole, userId?: string) => {
     const currentUserId = userId || user?.uid;
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error("Error writing role to localStorage", error);
       }
-    } else if (currentUserId && !newRole) {
+    } else if (currentUserId && !newRole) { // Clear role if newRole is null
       try {
         localStorage.removeItem('golibre-role-' + currentUserId);
       } catch (error) {
@@ -64,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      setLoading(true);
+      setLoading(true); // Start loading for auth state change processing
       if (firebaseUser) {
         const appUser: User = {
           uid: firebaseUser.uid,
@@ -78,74 +79,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (storedRole) {
             setRoleState(storedRole);
           } else {
-            // New user or role wiped, default to customer (will be redirected to driver UI)
-            setAndStoreRole('customer', firebaseUser.uid);
+            // If no role is stored, setRoleState to null.
+            // Role assignment will be handled by the auth page flow or other specific logic.
+            setRoleState(null); 
           }
         } catch (error) {
           console.error("Error reading role from localStorage", error);
-          setAndStoreRole('customer', firebaseUser.uid); // Default on error
+          setRoleState(null); // Default to null on error
         }
       } else {
         setUser(null);
         setRoleState(null);
+        // If on a protected route and user signs out, redirect to home or auth
+        if (pathname !== '/' && pathname !== '/auth' && !pathname.startsWith('/services/restaurant/profile')) { // Keep restaurant profile accessible for now if direct link
+          // router.replace('/'); // Or '/auth'
+        }
       }
-      if (isInitializing) {
-        setIsInitializing(false);
-      }
+      setIsInitializing(false); // Initial check is done
       setLoading(false); 
     });
-
-    if (!auth.currentUser && isInitializing) {
+    
+    // Ensure isInitializing is set to false if onAuthStateChanged doesn't fire quickly
+    // (e.g., if Firebase SDK is slow to load or there's no initial user)
+    const timer = setTimeout(() => {
+      if (isInitializing) {
         setIsInitializing(false);
         setLoading(false);
-    }
-    return () => unsubscribe();
-  }, [isInitializing, setAndStoreRole]);
+      }
+    }, 2000); // Adjust timeout as needed
 
-  const signIn = useCallback(async (email: string, password: string) => {
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    }
+  }, [isInitializing, setAndStoreRole, pathname]);
+
+  const signIn = useCallback(async (email: string, password: string): Promise<boolean> => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
-      // onAuthStateChanged handles state updates. Redirection is handled by pages.
+      // onAuthStateChanged handles user state updates.
+      setLoading(false);
+      return true;
     } catch (error: any) {
       console.error("Firebase Sign-In Error:", error);
       toast({ variant: "destructive", title: "Error de inicio de sesión", description: error.message });
       setLoading(false);
+      return false;
     }
   }, [toast]);
 
-  const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, displayName?: string): Promise<boolean> => {
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
         if (displayName) {
           await updateProfile(userCredential.user, { displayName });
-           setUser({ 
-            uid: userCredential.user.uid, 
-            displayName, 
-            email: userCredential.user.email, 
-            photoURL: userCredential.user.photoURL 
-          });
+           // The onAuthStateChanged listener will pick up the new user and set them.
+           // We don't setUser directly here to avoid race conditions with onAuthStateChanged.
         }
-        // Default new users to customer (which redirects to driver UI)
-        setAndStoreRole('customer', userCredential.user.uid);
+        // Role assignment will be handled in AuthClientContent based on 'next' param
         toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
-        // Redirection handled by pages (e.g. AuthPage useEffect)
+        setLoading(false);
+        return true;
       }
+      setLoading(false);
+      return false;
     } catch (error: any) {
       console.error("Firebase Sign-Up Error:", error);
       toast({ variant: "destructive", title: "Error de registro", description: error.message });
       setLoading(false);
+      return false;
     }
-  }, [toast, setAndStoreRole]);
+  }, [toast]);
 
   const signOut = useCallback(async () => {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      router.push('/');
+      // User and role will be set to null by onAuthStateChanged
+      router.push('/'); // Redirect to homepage after sign out
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
     } catch (error: any) {
       console.error("Firebase Sign-Out Error:", error);
@@ -154,27 +170,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, [router, toast]);
 
-  const setRole = useCallback((newRole: UserRole) => {
+  // This setRole is now more explicit, called from AuthClientContent or other role selection mechanisms
+  const setRoleAndUpdateStorage = useCallback((newRole: UserRole) => {
     setLoading(true);
     if (user) {
       setAndStoreRole(newRole, user.uid);
     } else {
+      // This case should be rare if setRole is called after user is confirmed
       setRoleState(newRole); 
     }
-
-    // Redirect based on the new role, focusing on driver UI
-    if (newRole && user) { 
-      router.push('/driver/dashboard');
-    } else if (!newRole && user) { 
-       router.push('/');
-    } else if (!user) { 
-      router.push('/');
-    }
     setLoading(false);
-  }, [router, user, setAndStoreRole]);
+  }, [user, setAndStoreRole]);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, isInitializing, signIn, signUp, signOut, setRole }}>
+    <AuthContext.Provider value={{ user, role, loading, isInitializing, signIn, signUp, signOut, setRole: setRoleAndUpdateStorage }}>
       {children}
     </AuthContext.Provider>
   );

@@ -3,7 +3,7 @@
 
 import React from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useState, useCallback, useMemo, useEffect } from 'react'; // Added useEffect
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { GoogleMap, LoadScriptNext, Marker } from '@react-google-maps/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Loader2 } from 'lucide-react';
 
 const containerStyle: React.CSSProperties = {
   width: '100%',
-  height: '400px',
+  height: '350px', // Adjusted height for map container
   borderRadius: '0.5rem',
 };
 
@@ -52,14 +52,16 @@ export default function RestaurantLocationMap({
   const geocoderRef = React.useRef<google.maps.Geocoder | null>(null);
 
   useEffect(() => {
-    console.log("Google Maps API Key being used by RestaurantLocationMap:", apiKey ? apiKey.substring(0, 10) + "..." : "API Key is empty");
+    // console.log("Google Maps API Key being used by RestaurantLocationMap:", apiKey ? apiKey.substring(0, 10) + "..." : "API Key is empty");
   }, [apiKey]);
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     geocoderRef.current = new google.maps.Geocoder();
-    if (initialLat && initialLng) {
-        map.setCenter({ lat: initialLat, lng: initialLng });
+    if (initialLat !== undefined && initialLng !== undefined && initialLat !== null && initialLng !== null) {
+        const initialPos = { lat: initialLat, lng: initialLng };
+        map.setCenter(initialPos);
+        setMarkerPosition(initialPos); // Set marker if initial values are present
     }
   }, [initialLat, initialLng]);
 
@@ -85,20 +87,20 @@ export default function RestaurantLocationMap({
     if (!markerPosition || !geocoderRef.current) return;
     setIsGeocoding(true);
     setGeocodingError(null);
+    let address = `Lat: ${markerPosition.lat.toFixed(4)}, Lng: ${markerPosition.lng.toFixed(4)}`; // Fallback address
     try {
       const response = await geocoderRef.current.geocode({ location: markerPosition });
-      let address = '';
       if (response && response.results[0]) {
         address = response.results[0].formatted_address;
       } else {
-         setGeocodingError('No se pudo obtener la dirección para esta ubicación.');
+         setGeocodingError('No se pudo obtener la dirección para esta ubicación. Se usará Lat/Lng como dirección.');
       }
       onLocationSelect({ lat: markerPosition.lat, lng: markerPosition.lng, address });
       if (setMapManuallyClosed) setMapManuallyClosed(false); 
     } catch (error) {
       console.error("Error reverse geocoding:", error);
-      setGeocodingError('Error al obtener la dirección. Intenta de nuevo.');
-      onLocationSelect({ lat: markerPosition.lat, lng: markerPosition.lng });
+      setGeocodingError('Error al obtener la dirección. Intenta de nuevo. Se usará Lat/Lng como dirección.');
+      onLocationSelect({ lat: markerPosition.lat, lng: markerPosition.lng, address }); // Pass fallback address
     } finally {
       setIsGeocoding(false);
     }
@@ -137,7 +139,7 @@ export default function RestaurantLocationMap({
     <LoadScriptNext
       googleMapsApiKey={apiKey}
       libraries={libraries}
-      loadingElement={<div className="flex items-center justify-center h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2">Cargando mapa...</p></div>}
+      loadingElement={<div className="flex items-center justify-center h-[350px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2">Cargando mapa...</p></div>}
     >
       <div className="space-y-4">
         <div className="flex gap-2">
@@ -158,7 +160,7 @@ export default function RestaurantLocationMap({
         <GoogleMap
           mapContainerStyle={containerStyle}
           center={mapCenter}
-          zoom={initialLat && initialLng ? 15 : 13}
+          zoom={initialLat !== undefined && initialLng !== undefined && initialLat !== null && initialLng !== null ? 15 : 13}
           onLoad={onLoad}
           onUnmount={onUnmount}
           onClick={onMapClick}
@@ -188,3 +190,6 @@ export default function RestaurantLocationMap({
     </LoadScriptNext>
   );
 }
+
+
+    

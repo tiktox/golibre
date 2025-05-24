@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, type UserRole } from '@/contexts/auth-context';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import LogoIcon from '@/components/icons/logo';
@@ -40,7 +40,7 @@ type SignInFormData = z.infer<typeof signInSchema>;
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
 export default function AuthClientContent() {
-  const { user, signIn, signUp, loading: authLoading, isInitializing } = useAuth();
+  const { user, role, signIn, signUp, loading: authLoading, isInitializing, setRole } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
@@ -52,10 +52,17 @@ export default function AuthClientContent() {
       if (nextUrl) {
         router.replace(nextUrl);
       } else {
-        router.replace('/driver/dashboard');
+        // Fallback redirection based on role if 'next' is not present
+        if (role === 'customer') {
+          router.replace('/customer/dashboard');
+        } else if (role === 'driver') {
+          router.replace('/driver/dashboard');
+        } else {
+          router.replace('/'); // Fallback if no role and no nextUrl
+        }
       }
     }
-  }, [user, authLoading, isInitializing, router, searchParams]);
+  }, [user, role, authLoading, isInitializing, router, searchParams]);
 
   const signInForm = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
@@ -69,20 +76,44 @@ export default function AuthClientContent() {
 
   const handleSignIn = async (data: SignInFormData) => {
     await signIn(data.email, data.password);
+    // Redirection is handled by useEffect
   };
 
   const handleSignUp = async (data: SignUpFormData) => {
-    await signUp(data.email, data.password, data.displayName);
+    const success = await signUp(data.email, data.password, data.displayName);
+    if (success) {
+      const nextUrl = searchParams.get('next');
+      let newRole: UserRole = null;
+      if (nextUrl?.startsWith('/customer')) {
+        newRole = 'customer';
+      } else if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
+        newRole = 'driver';
+      } else {
+        newRole = 'customer'; // Default role for new sign-ups if 'next' is ambiguous
+      }
+      setRole(newRole); // This will also store it in localStorage
+      // Redirection is handled by useEffect after role and user state update
+    }
   };
   
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
   const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
 
-  if (isInitializing) {
+  if (isInitializing || (authLoading && !user)) { // Show loading if initializing or auth is in progress and no user yet
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Cargando autenticación...</p>
+        <p className="text-muted-foreground">Cargando...</p>
+      </div>
+    );
+  }
+  // If user is already logged in, useEffect will redirect them.
+  // This content should only be visible if !user and not initializing/loading.
+  if (user && !authLoading && !isInitializing) {
+     return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Redirigiendo...</p>
       </div>
     );
   }
