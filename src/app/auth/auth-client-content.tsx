@@ -31,7 +31,9 @@ const signInSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
 });
 
-const signUpSchema = z.object({
+// This schema is for the /auth page, primarily for service providers or general signup.
+// Customer signup is now primarily on the homepage.
+const authPageSignUpSchema = z.object({
   profileImageFile: z.any().optional(),
   fullName: z.string().min(3, { message: "El nombre completo debe tener al menos 3 caracteres." }),
   phoneNumber: z.string()
@@ -46,7 +48,7 @@ const signUpSchema = z.object({
 });
 
 type SignInFormData = z.infer<typeof signInSchema>;
-type SignUpFormData = z.infer<typeof signUpSchema>;
+type AuthPageSignUpFormData = z.infer<typeof authPageSignUpSchema>;
 
 const DEFAULT_AVATAR_PLACEHOLDER = "https://placehold.co/128x128.png";
 
@@ -59,13 +61,12 @@ export default function AuthClientContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // For sign-up profile image
   const [imagePreview, setImagePreview] = useState<string | null>(DEFAULT_AVATAR_PLACEHOLDER);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
 
   useEffect(() => {
-     if (!isInitializing && !authLoading && user) {
+     if (!isInitializing && !authLoading && user) { // User is logged in
       const nextUrl = searchParams.get('next');
       if (nextUrl) {
         router.replace(nextUrl);
@@ -76,7 +77,9 @@ export default function AuthClientContent() {
         } else if (role === 'driver') {
           router.replace('/driver/dashboard');
         } else {
-          router.replace('/'); // Fallback if no role and no nextUrl
+          // If user is logged in but no role and no nextUrl, this is an edge case.
+          // Maybe redirect to a role selection or a generic dashboard. For now, homepage.
+          router.replace('/'); 
         }
       }
     }
@@ -87,8 +90,8 @@ export default function AuthClientContent() {
     defaultValues: { email: "", password: "" },
   });
 
-  const signUpForm = useForm<SignUpFormData>({
-    resolver: zodResolver(signUpSchema),
+  const authPageSignUpForm = useForm<AuthPageSignUpFormData>({
+    resolver: zodResolver(authPageSignUpSchema),
     defaultValues: { 
       profileImageFile: undefined,
       fullName: "", 
@@ -108,34 +111,36 @@ export default function AuthClientContent() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      signUpForm.setValue('profileImageFile', file, { shouldDirty: true });
+      authPageSignUpForm.setValue('profileImageFile', file, { shouldDirty: true });
     } else {
       setImageFile(null);
       setImagePreview(DEFAULT_AVATAR_PLACEHOLDER);
-      signUpForm.setValue('profileImageFile', undefined, { shouldDirty: true });
+      authPageSignUpForm.setValue('profileImageFile', undefined, { shouldDirty: true });
     }
   };
 
-  const handleSignIn = async (data: SignInFormData) => {
+  const handleSignInSubmit = async (data: SignInFormData) => {
     await signIn(data.email, data.password);
     // Redirection is handled by useEffect
   };
 
-  const handleSignUp = async (data: SignUpFormData) => {
-    // The 'profileImageFile' from data is the File object set by react-hook-form
+  const handleAuthPageSignUpSubmit = async (data: AuthPageSignUpFormData) => {
     const success = await signUp(data.email, data.password, data.fullName, data.phoneNumber, imageFile);
     if (success) {
       const nextUrl = searchParams.get('next');
       let newRole: UserRole = null;
-      if (nextUrl?.startsWith('/customer')) {
-        newRole = 'customer';
-      } else if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
+
+      // Determine role based on 'next' parameter if user signed up via /auth page
+      if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
         newRole = 'driver';
+      } else if (nextUrl?.startsWith('/customer')) { // Less likely now, but good to keep
+        newRole = 'customer';
       } else {
-        // Default role for new sign-ups if 'next' is ambiguous
-        newRole = 'customer'; 
+        // If signup on /auth page has no clear 'next' for role, default to 'driver'
+        // as customer signup is now primarily on homepage.
+        newRole = 'driver'; 
       }
-      await setRole(newRole); // This will also store it in localStorage and Firestore
+      await setRole(newRole);
       toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Tu rol ha sido establecido como ${newRole}.`});
       // Redirection is handled by useEffect after role and user state update
     }
@@ -153,7 +158,7 @@ export default function AuthClientContent() {
     );
   }
 
-  if (user && !authLoading && !isInitializing) {
+  if (user && !authLoading && !isInitializing) { // User is logged in, useEffect will redirect
      return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -165,7 +170,7 @@ export default function AuthClientContent() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/20 p-4 sm:p-8">
       <LogoIcon className="w-20 h-20 mb-6 text-primary" />
-      <Tabs defaultValue="signup" className="w-full max-w-md"> {/* Default to signup */}
+      <Tabs defaultValue="signup" className="w-full max-w-md">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Iniciar Sesión</TabsTrigger>
           <TabsTrigger value="signup">Registrarse</TabsTrigger>
@@ -177,7 +182,7 @@ export default function AuthClientContent() {
               <CardDescription>Accede a tu cuenta GoLibre.</CardDescription>
             </CardHeader>
             <Form {...signInForm}>
-              <form onSubmit={signInForm.handleSubmit(handleSignIn)}>
+              <form onSubmit={signInForm.handleSubmit(handleSignInSubmit)}>
                 <CardContent className="space-y-4">
                   <FormField
                     control={signInForm.control}
@@ -225,13 +230,13 @@ export default function AuthClientContent() {
           <Card className="shadow-xl">
             <CardHeader>
               <CardTitle className="text-2xl">Crear Cuenta</CardTitle>
-              <CardDescription>Únete a la comunidad GoLibre con tu información.</CardDescription>
+              <CardDescription>Únete a la comunidad GoLibre. Si eres cliente, puedes registrarte directamente en la página de inicio.</CardDescription>
             </CardHeader>
-            <Form {...signUpForm}>
-              <form onSubmit={signUpForm.handleSubmit(handleSignUp)}>
+            <Form {...authPageSignUpForm}>
+              <form onSubmit={authPageSignUpForm.handleSubmit(handleAuthPageSignUpSubmit)}>
                 <CardContent className="space-y-4">
                   <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="profileImageFile"
                     render={() => (
                       <FormItem className="flex flex-col items-center">
@@ -260,7 +265,7 @@ export default function AuthClientContent() {
                     )}
                   />
                    <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="fullName"
                     render={({ field }) => (
                       <FormItem>
@@ -273,7 +278,7 @@ export default function AuthClientContent() {
                     )}
                   />
                   <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="phoneNumber"
                     render={({ field }) => (
                       <FormItem>
@@ -286,7 +291,7 @@ export default function AuthClientContent() {
                     )}
                   />
                   <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="email"
                     render={({ field }) => (
                       <FormItem>
@@ -299,7 +304,7 @@ export default function AuthClientContent() {
                     )}
                   />
                   <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="password"
                     render={({ field }) => (
                       <FormItem>
@@ -317,7 +322,7 @@ export default function AuthClientContent() {
                     )}
                   />
                   <FormField
-                    control={signUpForm.control}
+                    control={authPageSignUpForm.control}
                     name="confirmPassword"
                     render={({ field }) => (
                       <FormItem>
