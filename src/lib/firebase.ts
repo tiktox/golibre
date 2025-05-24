@@ -5,47 +5,46 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+const messagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
+const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
-// Explicitly check if the API key is available during initialization.
-// This will help determine if the environment variable is being read correctly by Vercel at build time.
-if (!apiKey) {
+// Explicitly check if all essential Firebase config values are available during initialization.
+// This will help determine if the environment variables are being read correctly by Vercel at build time.
+if (!apiKey || !authDomain || !projectId || !storageBucket || !messagingSenderId || !appId) {
+  const missingVars = [];
+  if (!apiKey) missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
+  if (!authDomain) missingVars.push('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+  if (!projectId) missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+  if (!storageBucket) missingVars.push('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
+  if (!messagingSenderId) missingVars.push('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
+  if (!appId) missingVars.push('NEXT_PUBLIC_FIREBASE_APP_ID');
+  
   throw new Error(
-    'Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is not set or not available in the build environment. Please check your Vercel environment variable configuration.'
+    `One or more Firebase environment variables are not set or not available in the build environment. ` +
+    `Please check your Vercel environment variable configuration. Missing or empty: ${missingVars.join(', ')}.` +
+    ` Ensure they are correctly set in your Vercel project settings for the Production environment.`
   );
 }
 
+// measurementId is optional for core Firebase functionality but include if used.
+const measurementId = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
+
 const firebaseConfig = {
-  apiKey: apiKey,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey,
+  authDomain,
+  projectId,
+  storageBucket,
+  messagingSenderId,
+  appId,
+  measurementId, // This will be undefined if not set, which is acceptable for initializeApp
 };
 
 // Initialize Firebase
 let firebaseApp: FirebaseApp;
 if (!getApps().length) {
-  // Check if all essential config values are present before initializing
-  if (
-    !firebaseConfig.authDomain ||
-    !firebaseConfig.projectId ||
-    !firebaseConfig.storageBucket ||
-    !firebaseConfig.messagingSenderId ||
-    !firebaseConfig.appId
-  ) {
-    let missingKeys = [];
-    if (!firebaseConfig.authDomain) missingKeys.push('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
-    if (!firebaseConfig.projectId) missingKeys.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
-    if (!firebaseConfig.storageBucket) missingKeys.push('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
-    if (!firebaseConfig.messagingSenderId) missingKeys.push('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
-    if (!firebaseConfig.appId) missingKeys.push('NEXT_PUBLIC_FIREBASE_APP_ID');
-    
-    throw new Error(
-      `One or more Firebase configuration values are missing in the build environment. Please check your Vercel environment variables. Missing: ${missingKeys.join(', ')}`
-    );
-  }
   firebaseApp = initializeApp(firebaseConfig);
 } else {
   firebaseApp = getApp();
