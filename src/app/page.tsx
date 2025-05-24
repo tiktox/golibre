@@ -83,7 +83,7 @@ export default function HomePage() {
     if (!isInitializing && !authLoading && user && role) {
       if (role === 'customer') {
         router.replace('/customer/dashboard');
-      } else if (role === 'driver') { // Assuming 'driver' is the role for service providers
+      } else if (role === 'driver') { 
         router.replace('/driver/dashboard');
       }
     }
@@ -111,11 +111,14 @@ export default function HomePage() {
     if (success) {
       await setRole('customer'); 
       toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Ahora eres un cliente.`});
-      // Redirection is handled by useEffect
+      // Redirection is handled by useEffect after role and user state update
     }
   };
 
   const handleSignInSubmit = async (data: SignInFormData) => {
+    // For users signing in on the homepage, we don't explicitly set their role here.
+    // Their existing role (customer or driver) will be loaded by AuthContext,
+    // and the useEffect will redirect them accordingly.
     await signIn(data.email, data.password);
     // Redirection is handled by useEffect
   };
@@ -134,6 +137,8 @@ export default function HomePage() {
   }
   
   if (user && !authLoading && !isInitializing) {
+    // This state means user is logged in but redirection useEffect hasn't kicked in yet
+    // or is in progress. Show a loader.
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -142,6 +147,7 @@ export default function HomePage() {
     );
   }
 
+  // If !user (and not initializing/loading), show auth forms
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/10 p-4 sm:p-8">
       <LogoIcon className="w-20 h-20 mb-6 text-primary" />
@@ -339,7 +345,7 @@ export default function HomePage() {
       <div className="text-center w-full max-w-md">
         <p className="text-md font-medium text-foreground mb-3">¿Quieres ofrecer tus servicios en GoLibre?</p>
         <Button
-          onClick={() => router.push('/auth?next=/driver/dashboard')} // This still goes to /auth for service providers
+          onClick={() => router.push('/auth?next=/driver/dashboard')} 
           variant="secondary"
           size="lg"
           className="w-full py-5 text-md"
@@ -351,6 +357,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-
-    

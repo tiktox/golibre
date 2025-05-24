@@ -1,7 +1,7 @@
 
 "use client";
 import { useState, useEffect } from 'react';
-import Image from 'next/image'; // For image preview if needed directly
+import Image from 'next/image'; 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,6 +31,7 @@ const signInSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
 });
 
+// This schema is now primarily for Service Provider sign-up on this page
 const authPageSignUpSchema = z.object({
   profileImageFile: z.any().optional(),
   fullName: z.string().min(3, { message: "El nombre completo debe tener al menos 3 caracteres." }),
@@ -70,13 +71,15 @@ export default function AuthClientContent() {
       const nextUrl = searchParams.get('next');
       if (nextUrl) {
         router.replace(nextUrl);
-      } else {
+      } else { // No nextUrl, redirect based on role (primarily for users who land here directly or after login)
         if (role === 'customer') {
           router.replace('/customer/dashboard');
         } else if (role === 'driver') {
           router.replace('/driver/dashboard');
         } else {
-          router.replace('/'); 
+          // If user is logged in but has no role (should be rare if role is set on signup)
+          // and no 'next' parameter, default to driver/services dashboard as this page is provider-focused
+          router.replace('/driver/dashboard'); 
         }
       }
     }
@@ -121,26 +124,16 @@ export default function AuthClientContent() {
     // Redirection is handled by useEffect
   };
 
+  // This signup is for Service Providers coming via "Ofrecer servicios"
   const handleAuthPageSignUpSubmit = async (data: AuthPageSignUpFormData) => {
     const success = await signUp(data.email, data.password, data.fullName, data.phoneNumber, imageFile);
     if (success) {
-      const nextUrl = searchParams.get('next');
-      let newRole: UserRole = null;
-
-      if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
-        newRole = 'driver';
-      } else if (nextUrl?.startsWith('/customer')) { 
-        newRole = 'customer';
-      } else {
-        // If signup on /auth page has no clear 'next' for role, default to 'driver'
-        // if they came here through "Offer services" button (which won't have 'next')
-        // or if they somehow landed here without a clear 'next'.
-        // This scenario is less likely now that customer signup is on homepage.
-        newRole = 'driver'; 
-      }
-      await setRole(newRole);
-      toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Tu rol ha sido establecido como ${newRole}.`});
-      // Redirection is handled by useEffect after role and user state update
+      // For new users registering via this page (linked from "Ofrecer Servicios"),
+      // set their role to 'driver'.
+      await setRole('driver');
+      toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Tu cuenta de proveedor ha sido creada.`});
+      // Redirection is handled by useEffect after role and user state update,
+      // using the 'next' parameter (e.g., /driver/dashboard).
     }
   };
   
@@ -171,7 +164,7 @@ export default function AuthClientContent() {
       <Tabs defaultValue={initialTab} className="w-full max-w-md">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Iniciar Sesión</TabsTrigger>
-          <TabsTrigger value="signup">Registrarse</TabsTrigger>
+          <TabsTrigger value="signup">Registrarse (Proveedor)</TabsTrigger>
         </TabsList>
         <TabsContent value="signin">
           <Card className="shadow-xl">
@@ -215,8 +208,8 @@ export default function AuthClientContent() {
                   />
                 </CardContent>
                 <CardFooter>
-                  <Button type="submit" className="w-full" disabled={authLoading}>
-                    {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Button type="submit" className="w-full" disabled={authLoading || signInForm.formState.isSubmitting}>
+                    {(authLoading || signInForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Iniciar Sesión
                   </Button>
                 </CardFooter>
@@ -227,8 +220,8 @@ export default function AuthClientContent() {
         <TabsContent value="signup">
           <Card className="shadow-xl">
             <CardHeader>
-              <CardTitle className="text-2xl">Crear Cuenta</CardTitle>
-              <CardDescription>Únete a la comunidad GoLibre. Si eres cliente, puedes registrarte directamente en la página de inicio.</CardDescription>
+              <CardTitle className="text-2xl">Crear Cuenta de Proveedor</CardTitle>
+              <CardDescription>Regístrate para ofrecer tus servicios en GoLibre. Si buscas servicios como cliente, por favor regístrate en la página de inicio.</CardDescription>
             </CardHeader>
             <Form {...authPageSignUpForm}>
               <form onSubmit={authPageSignUpForm.handleSubmit(handleAuthPageSignUpSubmit)}>
@@ -339,9 +332,9 @@ export default function AuthClientContent() {
                   />
                 </CardContent>
                 <CardFooter>
-                  <Button type="submit" className="w-full" disabled={authLoading}>
-                    {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Registrarse
+                  <Button type="submit" className="w-full" disabled={authLoading || authPageSignUpForm.formState.isSubmitting}>
+                    {(authLoading || authPageSignUpForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Registrarse como Proveedor
                   </Button>
                 </CardFooter>
               </form>
