@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth } from '@/lib/firebase'; // Firebase auth
+import { auth, db, storage } from '@/lib/firebase'; // Firebase auth, db, storage
 import { 
   onAuthStateChanged, 
   signOut as firebaseSignOut,
@@ -12,6 +12,8 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
+import { doc, setDoc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore"; // Firestore functions
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Storage functions
 import { useToast } from '@/hooks/use-toast'; 
 
 export type UserRole = 'customer' | 'driver' | null;
@@ -21,6 +23,7 @@ export interface User {
   displayName: string | null;
   email: string | null;
   photoURL: string | null;
+  // phoneNumber?: string | null; // Might be useful to add to the local User object
 }
 
 interface AuthContextType {
@@ -28,10 +31,16 @@ interface AuthContextType {
   role: UserRole;
   loading: boolean;
   isInitializing: boolean;
-  signIn: (email: string, password: string) => Promise<boolean>; // Returns boolean success
-  signUp: (email: string, password: string, displayName?: string) => Promise<boolean>; // Returns boolean success
+  signIn: (email: string, password: string) => Promise<boolean>;
+  signUp: (
+    email: string, 
+    password: string, 
+    fullName: string, 
+    phoneNumber: string, 
+    profileImageFile: File | null
+  ) => Promise<boolean>;
   signOut: () => void;
-  setRole: (role: UserRole) => void;
+  setRole: (role: UserRole) => Promise<void>; // Now async as it updates Firestore
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,32 +48,61 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRoleState] = useState<UserRole>(null);
-  const [loading, setLoading] = useState(false); // Generic loading for auth operations
-  const [isInitializing, setIsInitializing] = useState(true); // Specific for initial auth state check
+  const [loading, setLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
   const pathname = usePathname();
 
-  const setAndStoreRole = useCallback((newRole: UserRole, userId?: string) => {
-    const currentUserId = userId || user?.uid;
-    setRoleState(newRole);
-    if (currentUserId && newRole) {
+  const setAndStoreRole = useCallback(async (newRole: UserRole, userIdToUpdate?: string) => {
+    const currentUserId = userIdToUpdate || user?.uid;
+    
+    if (currentUserId) {
+      setLoading(true);
       try {
-        localStorage.setItem('golibre-role-' + currentUserId, newRole);
+        setRoleState(newRole); // Update local state immediately for responsiveness
+        if (newRole) {
+          localStorage.setItem('golibre-role-' + currentUserId, newRole);
+          const userDocRef = doc(db, "users", currentUserId);
+          // Check if doc exists before updating, or use setDoc with merge if creating
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            await updateDoc(userDocRef, { role: newRole, updatedAt: serverTimestamp() });
+          } else {
+            // This case might happen if user doc wasn't created properly during sign-up
+            // Or if setRole is called before user doc creation.
+            // For now, we assume user doc exists if we are setting a role.
+            // Consider creating it if it doesn't:
+            // await setDoc(userDocRef, { role: newRole, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+            console.warn(`User document for ${currentUserId} not found when trying to set role.`);
+          }
+
+        } else { // Clearing role
+          localStorage.removeItem('golibre-role-' + currentUserId);
+          const userDocRef = doc(db, "users", currentUserId);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            await updateDoc(userDocRef, { role: null, updatedAt: serverTimestamp() });
+          }
+        }
       } catch (error) {
-        console.error("Error writing role to localStorage", error);
+        console.error("Error updating role in localStorage/Firestore", error);
+        toast({ variant: "destructive", title: "Error al actualizar rol", description: "No se pudo guardar la selección de rol." });
+        // Optionally revert local state if Firestore update fails
+        // const previousRole = localStorage.getItem('golibre-role-' + currentUserId) as UserRole;
+        // setRoleState(previousRole);
+      } finally {
+        setLoading(false);
       }
-    } else if (currentUserId && !newRole) { // Clear role if newRole is null
-      try {
-        localStorage.removeItem('golibre-role-' + currentUserId);
-      } catch (error) {
-        console.error("Error removing role from localStorage", error);
-      }
+    } else {
+      // Handle case where there's no currentUserId (e.g., user not logged in)
+      // This might just be a local state update for a pending user
+      setRoleState(newRole);
     }
-  }, [user?.uid]);
+  }, [user?.uid, toast]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       setLoading(true); 
       if (firebaseUser) {
         const appUser: User = {
@@ -75,14 +113,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(appUser);
         try {
-          const storedRole = localStorage.getItem('golibre-role-' + firebaseUser.uid) as UserRole;
-          if (storedRole) {
-            setRoleState(storedRole);
+          // Try to get role from Firestore first as primary source of truth
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          const docSnap = await getDoc(userDocRef);
+          let userRoleFromDb: UserRole = null;
+
+          if (docSnap.exists()) {
+            userRoleFromDb = docSnap.data()?.role as UserRole || null;
+          }
+
+          if (userRoleFromDb) {
+            setRoleState(userRoleFromDb);
+            localStorage.setItem('golibre-role-' + firebaseUser.uid, userRoleFromDb);
           } else {
-            setRoleState(null); 
+            // Fallback to localStorage if not in DB (e.g. older users or if DB write failed)
+            const storedRole = localStorage.getItem('golibre-role-' + firebaseUser.uid) as UserRole;
+            if (storedRole) {
+              setRoleState(storedRole);
+               // Optionally update Firestore if missing role there but present in localStorage
+              // await setDoc(userDocRef, { role: storedRole, updatedAt: serverTimestamp() }, { merge: true });
+            } else {
+              setRoleState(null); 
+            }
           }
         } catch (error) {
-          console.error("Error reading role from localStorage", error);
+          console.error("Error reading role from Firestore/localStorage", error);
           setRoleState(null); 
         }
       } else {
@@ -98,19 +153,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsInitializing(false);
         setLoading(false);
       }
-    }, 2500); // Slightly increased timeout
-
+    }, 2500); 
 
     return () => {
       unsubscribe();
       clearTimeout(timer);
     }
-  }, [isInitializing, setAndStoreRole]); // pathname removed as it caused too many re-runs
+  }, [isInitializing]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<boolean> => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Role is set by onAuthStateChanged effect
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
       setLoading(false);
       return true;
@@ -128,21 +183,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [toast]);
 
-  const signUp = useCallback(async (email: string, password: string, displayName?: string): Promise<boolean> => {
+  const signUp = useCallback(
+    async (
+      email: string, 
+      password: string, 
+      fullName: string, 
+      phoneNumber: string, 
+      profileImageFile: File | null
+    ): Promise<boolean> => {
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
-        if (displayName) {
-          await updateProfile(userCredential.user, { displayName });
+        let uploadedPhotoURL: string | null = null;
+        if (profileImageFile) {
+          try {
+            const imageRef = ref(storage, `users/${userCredential.user.uid}/profileImage/${Date.now()}-${profileImageFile.name}`);
+            await uploadBytes(imageRef, profileImageFile);
+            uploadedPhotoURL = await getDownloadURL(imageRef);
+          } catch (storageError) {
+            console.error("Error uploading profile image:", storageError);
+            toast({ variant: "destructive", title: "Error de Imagen", description: "No se pudo subir la foto de perfil, pero tu cuenta fue creada." });
+            // Continue without photoURL if upload fails
+          }
         }
-        // Role assignment is now handled by AuthClientContent based on 'next' param.
-        toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
+
+        await updateProfile(userCredential.user, { 
+          displayName: fullName, 
+          photoURL: uploadedPhotoURL 
+        });
+        
+        // Create user document in Firestore
+        const userDocRef = doc(db, "users", userCredential.user.uid);
+        await setDoc(userDocRef, {
+          uid: userCredential.user.uid,
+          email,
+          fullName,
+          phoneNumber,
+          photoURL: uploadedPhotoURL,
+          role: null, // Role will be set by AuthClientContent after this returns
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        
+        // User object will be updated by onAuthStateChanged, including new displayName/photoURL
         setLoading(false);
-        return true;
+        return true; // Success, role assignment handled by AuthClientContent
       }
       setLoading(false);
-      return false; // Should not happen if userCredential.user is not available after successful creation
+      return false; 
     } catch (error: any) {
       console.error("Firebase Sign-Up Error:", error); 
       let description = "Ocurrió un error inesperado durante el registro. Por favor, inténtalo de nuevo.";
@@ -163,27 +252,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
+      // User and role will be set to null by onAuthStateChanged
       router.push('/'); 
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
     } catch (error: any) {
       console.error("Firebase Sign-Out Error:", error);
-      toast({ variant: "destructive", title: "Error al cerrar sesión", description: error.message });
+      toast({ variant: "destructive", title: "Error al cerrar sesión", description: (error as Error).message });
     }
     setLoading(false);
   }, [router, toast]);
 
-  const setRoleAndUpdateStorage = useCallback((newRole: UserRole) => {
-    // setLoading(true); // Avoid setting loading here as it's a quick operation
-    if (user) {
-      setAndStoreRole(newRole, user.uid);
-    } else {
-      setRoleState(newRole); 
-    }
-    // setLoading(false);
-  }, [user, setAndStoreRole]);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, isInitializing, signIn, signUp, signOut, setRole: setRoleAndUpdateStorage }}>
+    <AuthContext.Provider value={{ user, role, loading, isInitializing, signIn, signUp, signOut, setRole: setAndStoreRole }}>
       {children}
     </AuthContext.Provider>
   );

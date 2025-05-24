@@ -1,6 +1,7 @@
 
 "use client";
 import { useState, useEffect } from 'react';
+import Image from 'next/image'; // For image preview if needed directly
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -18,8 +20,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth, type UserRole } from '@/contexts/auth-context';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Camera } from 'lucide-react';
 import LogoIcon from '@/components/icons/logo';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useToast } from '@/hooks/use-toast';
+
 
 const signInSchema = z.object({
   email: z.string().email({ message: "Correo electrónico inválido." }),
@@ -27,7 +32,11 @@ const signInSchema = z.object({
 });
 
 const signUpSchema = z.object({
-  displayName: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres."}).optional(),
+  profileImageFile: z.any().optional(),
+  fullName: z.string().min(3, { message: "El nombre completo debe tener al menos 3 caracteres." }),
+  phoneNumber: z.string()
+    .min(10, { message: "El número de teléfono debe tener al menos 10 dígitos."})
+    .regex(/^\+?[1-9]\d{1,14}$/, { message: "Número de teléfono inválido. Incluye el código de país si es necesario (ej: +18091234567)." }),
   email: z.string().email({ message: "Correo electrónico inválido." }),
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
   confirmPassword: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
@@ -39,12 +48,21 @@ const signUpSchema = z.object({
 type SignInFormData = z.infer<typeof signInSchema>;
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
+const DEFAULT_AVATAR_PLACEHOLDER = "https://placehold.co/128x128.png";
+
 export default function AuthClientContent() {
   const { user, role, signIn, signUp, loading: authLoading, isInitializing, setRole } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // For sign-up profile image
+  const [imagePreview, setImagePreview] = useState<string | null>(DEFAULT_AVATAR_PLACEHOLDER);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
 
   useEffect(() => {
      if (!isInitializing && !authLoading && user) {
@@ -71,8 +89,32 @@ export default function AuthClientContent() {
 
   const signUpForm = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
-    defaultValues: { displayName: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { 
+      profileImageFile: undefined,
+      fullName: "", 
+      phoneNumber: "",
+      email: "", 
+      password: "", 
+      confirmPassword: "" 
+    },
   });
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      signUpForm.setValue('profileImageFile', file, { shouldDirty: true });
+    } else {
+      setImageFile(null);
+      setImagePreview(DEFAULT_AVATAR_PLACEHOLDER);
+      signUpForm.setValue('profileImageFile', undefined, { shouldDirty: true });
+    }
+  };
 
   const handleSignIn = async (data: SignInFormData) => {
     await signIn(data.email, data.password);
@@ -80,7 +122,8 @@ export default function AuthClientContent() {
   };
 
   const handleSignUp = async (data: SignUpFormData) => {
-    const success = await signUp(data.email, data.password, data.displayName);
+    // The 'profileImageFile' from data is the File object set by react-hook-form
+    const success = await signUp(data.email, data.password, data.fullName, data.phoneNumber, imageFile);
     if (success) {
       const nextUrl = searchParams.get('next');
       let newRole: UserRole = null;
@@ -89,9 +132,11 @@ export default function AuthClientContent() {
       } else if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
         newRole = 'driver';
       } else {
-        newRole = 'customer'; // Default role for new sign-ups if 'next' is ambiguous
+        // Default role for new sign-ups if 'next' is ambiguous
+        newRole = 'customer'; 
       }
-      setRole(newRole); // This will also store it in localStorage
+      await setRole(newRole); // This will also store it in localStorage and Firestore
+      toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Tu rol ha sido establecido como ${newRole}.`});
       // Redirection is handled by useEffect after role and user state update
     }
   };
@@ -99,7 +144,7 @@ export default function AuthClientContent() {
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
   const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
 
-  if (isInitializing || (authLoading && !user)) { // Show loading if initializing or auth is in progress and no user yet
+  if (isInitializing || (authLoading && !user)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -107,8 +152,7 @@ export default function AuthClientContent() {
       </div>
     );
   }
-  // If user is already logged in, useEffect will redirect them.
-  // This content should only be visible if !user and not initializing/loading.
+
   if (user && !authLoading && !isInitializing) {
      return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -121,7 +165,7 @@ export default function AuthClientContent() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/20 p-4 sm:p-8">
       <LogoIcon className="w-20 h-20 mb-6 text-primary" />
-      <Tabs defaultValue="signin" className="w-full max-w-md">
+      <Tabs defaultValue="signup" className="w-full max-w-md"> {/* Default to signup */}
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Iniciar Sesión</TabsTrigger>
           <TabsTrigger value="signup">Registrarse</TabsTrigger>
@@ -181,19 +225,61 @@ export default function AuthClientContent() {
           <Card className="shadow-xl">
             <CardHeader>
               <CardTitle className="text-2xl">Crear Cuenta</CardTitle>
-              <CardDescription>Únete a la comunidad GoLibre.</CardDescription>
+              <CardDescription>Únete a la comunidad GoLibre con tu información.</CardDescription>
             </CardHeader>
             <Form {...signUpForm}>
               <form onSubmit={signUpForm.handleSubmit(handleSignUp)}>
                 <CardContent className="space-y-4">
+                  <FormField
+                    control={signUpForm.control}
+                    name="profileImageFile"
+                    render={() => (
+                      <FormItem className="flex flex-col items-center">
+                        <FormLabel htmlFor="profile-image-upload-signup" className="cursor-pointer">
+                          <Avatar className="h-24 w-24 border-2 border-primary/50 hover:border-primary transition-colors">
+                            <AvatarImage src={imagePreview || undefined} alt="Foto de perfil" data-ai-hint="user avatar" />
+                            <AvatarFallback>
+                              <Camera className="h-10 w-10 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            id="profile-image-upload-signup"
+                            type="file"
+                            accept="image/png, image/jpeg, image/webp"
+                            className="sr-only"
+                            onChange={handleImageChange}
+                          />
+                        </FormControl>
+                        <FormDescription className="mt-1 text-center text-xs">
+                          Sube tu foto de perfil (Opcional).
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                    <FormField
                     control={signUpForm.control}
-                    name="displayName"
+                    name="fullName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nombre (Opcional)</FormLabel>
+                        <FormLabel>Nombre Completo</FormLabel>
                         <FormControl>
-                          <Input placeholder="Tu Nombre" {...field} />
+                          <Input placeholder="Ej: Juan Pérez" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={signUpForm.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número de Teléfono</FormLabel>
+                        <FormControl>
+                          <Input type="tel" placeholder="Ej: +18091234567" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
