@@ -1,9 +1,9 @@
 
 "use client";
 
-import React from 'react'; // Added React import
+import React from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react'; // Added useEffect
 import { GoogleMap, LoadScriptNext, Marker } from '@react-google-maps/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,14 @@ const defaultCenter = {
   lng: -69.9312,
 };
 
-const libraries = ['places'] as any; // Explicitly type as any or specific type if available
+const libraries = ['places'] as any; 
 
 interface RestaurantLocationMapProps {
   apiKey: string;
   initialLat?: number | null;
   initialLng?: number | null;
   onLocationSelect: (location: { lat: number; lng: number; address?: string }) => void;
-  setMapManuallyClosed?: Dispatch<SetStateAction<boolean>>; // To close dialog from here
+  setMapManuallyClosed?: Dispatch<SetStateAction<boolean>>; 
 }
 
 export default function RestaurantLocationMap({
@@ -50,6 +50,10 @@ export default function RestaurantLocationMap({
 
   const mapRef = React.useRef<google.maps.Map | null>(null);
   const geocoderRef = React.useRef<google.maps.Geocoder | null>(null);
+
+  useEffect(() => {
+    console.log("Google Maps API Key being used by RestaurantLocationMap:", apiKey ? apiKey.substring(0, 10) + "..." : "API Key is empty");
+  }, [apiKey]);
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -82,19 +86,18 @@ export default function RestaurantLocationMap({
     setIsGeocoding(true);
     setGeocodingError(null);
     try {
-      const results = await geocoderRef.current.geocode({ location: markerPosition });
+      const response = await geocoderRef.current.geocode({ location: markerPosition });
       let address = '';
-      if (results && results.results[0]) {
-        address = results.results[0].formatted_address;
+      if (response && response.results[0]) {
+        address = response.results[0].formatted_address;
       } else {
          setGeocodingError('No se pudo obtener la dirección para esta ubicación.');
       }
       onLocationSelect({ lat: markerPosition.lat, lng: markerPosition.lng, address });
-      if (setMapManuallyClosed) setMapManuallyClosed(false); // Close dialog
+      if (setMapManuallyClosed) setMapManuallyClosed(false); 
     } catch (error) {
       console.error("Error reverse geocoding:", error);
       setGeocodingError('Error al obtener la dirección. Intenta de nuevo.');
-      // Still provide coordinates even if address fails
       onLocationSelect({ lat: markerPosition.lat, lng: markerPosition.lng });
     } finally {
       setIsGeocoding(false);
@@ -106,9 +109,9 @@ export default function RestaurantLocationMap({
     setIsGeocoding(true);
     setGeocodingError(null);
     try {
-      const results = await geocoderRef.current.geocode({ address: searchAddress });
-      if (results && results.results[0] && results.results[0].geometry) {
-        const location = results.results[0].geometry.location;
+      const response = await geocoderRef.current.geocode({ address: searchAddress });
+      if (response && response.results[0] && response.results[0].geometry) {
+        const location = response.results[0].geometry.location;
         const newPos = { lat: location.lat(), lng: location.lng() };
         setMarkerPosition(newPos);
         setMapCenter(newPos);
