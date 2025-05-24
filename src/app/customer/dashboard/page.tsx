@@ -1,7 +1,7 @@
 
 "use client";
 import ProtectedRoute from "@/components/protected-route";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { ShoppingBag, History, UserCircle } from "lucide-react";
