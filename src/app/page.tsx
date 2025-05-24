@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const customerSignUpSchema = z.object({
   profileImageFile: z.any().optional(),
@@ -38,12 +39,18 @@ const customerSignUpSchema = z.object({
   path: ["confirmPassword"],
 });
 
+const signInSchema = z.object({
+  email: z.string().email({ message: "Correo electrónico inválido." }),
+  password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
+});
+
 type CustomerSignUpFormData = z.infer<typeof customerSignUpSchema>;
+type SignInFormData = z.infer<typeof signInSchema>;
 
 const DEFAULT_AVATAR_PLACEHOLDER = "https://placehold.co/128x128.png";
 
 export default function HomePage() {
-  const { user, role, loading: authLoading, isInitializing, signUp, setRole } = useAuth();
+  const { user, role, loading: authLoading, isInitializing, signUp, signIn, setRole } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -52,7 +59,7 @@ export default function HomePage() {
   const [imagePreview, setImagePreview] = useState<string | null>(DEFAULT_AVATAR_PLACEHOLDER);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  const customerForm = useForm<CustomerSignUpFormData>({
+  const customerSignUpForm = useForm<CustomerSignUpFormData>({
     resolver: zodResolver(customerSignUpSchema),
     defaultValues: {
       profileImageFile: undefined,
@@ -64,11 +71,19 @@ export default function HomePage() {
     },
   });
 
+  const signInForm = useForm<SignInFormData>({
+    resolver: zodResolver(signInSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
   useEffect(() => {
     if (!isInitializing && !authLoading && user && role) {
       if (role === 'customer') {
         router.replace('/customer/dashboard');
-      } else if (role === 'driver') {
+      } else if (role === 'driver') { // Assuming 'driver' is the role for service providers
         router.replace('/driver/dashboard');
       }
     }
@@ -83,21 +98,26 @@ export default function HomePage() {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      customerForm.setValue('profileImageFile', file, { shouldDirty: true });
+      customerSignUpForm.setValue('profileImageFile', file, { shouldDirty: true });
     } else {
       setImageFile(null);
       setImagePreview(DEFAULT_AVATAR_PLACEHOLDER);
-      customerForm.setValue('profileImageFile', undefined, { shouldDirty: true });
+      customerSignUpForm.setValue('profileImageFile', undefined, { shouldDirty: true });
     }
   };
 
-  const handleCustomerSignUp = async (data: CustomerSignUpFormData) => {
+  const handleCustomerSignUpSubmit = async (data: CustomerSignUpFormData) => {
     const success = await signUp(data.email, data.password, data.fullName, data.phoneNumber, imageFile);
     if (success) {
       await setRole('customer'); 
       toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Ahora eres un cliente.`});
-      // Redirection is handled by useEffect after role and user state update
+      // Redirection is handled by useEffect
     }
+  };
+
+  const handleSignInSubmit = async (data: SignInFormData) => {
+    await signIn(data.email, data.password);
+    // Redirection is handled by useEffect
   };
 
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
@@ -130,145 +150,196 @@ export default function HomePage() {
         Digitalizando tu entorno para estar mas cerca de ti!
       </p>
 
-      <Card className="w-full max-w-md shadow-xl mb-10">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center">Crear Cuenta de Cliente</CardTitle>
-          <CardDescription className="text-center">Únete a la comunidad GoLibre con tu información.</CardDescription>
-        </CardHeader>
-        <Form {...customerForm}>
-          <form onSubmit={customerForm.handleSubmit(handleCustomerSignUp)}>
-            <CardContent className="space-y-4">
-              <FormField
-                control={customerForm.control}
-                name="profileImageFile"
-                render={() => (
-                  <FormItem className="flex flex-col items-center">
-                    <FormLabel htmlFor="profile-image-upload-home" className="cursor-pointer">
-                      <Avatar className="h-24 w-24 border-2 border-primary/50 hover:border-primary transition-colors">
-                        <AvatarImage src={imagePreview || undefined} alt="Foto de perfil" data-ai-hint="user avatar"/>
-                        <AvatarFallback>
-                          <Camera className="h-10 w-10 text-muted-foreground" />
-                        </AvatarFallback>
-                      </Avatar>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        id="profile-image-upload-home"
-                        type="file"
-                        accept="image/png, image/jpeg, image/webp"
-                        className="sr-only"
-                        onChange={handleImageChange}
-                      />
-                    </FormControl>
-                    <FormDescription className="mt-1 text-center text-xs">
-                      Sube tu foto de perfil (Opcional).
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={customerForm.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre Completo</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej: Juan Pérez" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={customerForm.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número de Teléfono</FormLabel>
-                    <FormControl>
-                      <Input type="tel" placeholder="Ej: +18091234567" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={customerForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Correo Electrónico</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="tu@correo.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={customerForm.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contraseña</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={togglePasswordVisibility}>
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={customerForm.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirmar Contraseña</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" {...field} />
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={toggleConfirmPasswordVisibility}>
-                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="w-full sm:w-auto" 
-                onClick={() => router.push('/auth?tab=signin')}
-              >
-                Iniciar Sesión
-              </Button>
-              <Button 
-                type="submit" 
-                className="w-full sm:w-auto flex-grow" 
-                disabled={authLoading || customerForm.formState.isSubmitting}
-              >
-                {(authLoading || customerForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Registrarme como cliente
-              </Button>
-            </CardFooter>
-          </form>
-        </Form>
-      </Card>
+      <Tabs defaultValue="signup" className="w-full max-w-md mb-10">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="signin">Iniciar Sesión</TabsTrigger>
+          <TabsTrigger value="signup">Registrarse (Cliente)</TabsTrigger>
+        </TabsList>
+        <TabsContent value="signin">
+          <Card className="shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
+              <CardDescription>Accede a tu cuenta GoLibre.</CardDescription>
+            </CardHeader>
+            <Form {...signInForm}>
+              <form onSubmit={signInForm.handleSubmit(handleSignInSubmit)}>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={signInForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Correo Electrónico</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="tu@correo.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={signInForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contraseña</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                            <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={togglePasswordVisibility}>
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+                <CardFooter>
+                  <Button type="submit" className="w-full" disabled={authLoading || signInForm.formState.isSubmitting}>
+                    {(authLoading || signInForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Iniciar Sesión
+                  </Button>
+                </CardFooter>
+              </form>
+            </Form>
+          </Card>
+        </TabsContent>
+        <TabsContent value="signup">
+          <Card className="shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-2xl">Crear Cuenta de Cliente</CardTitle>
+              <CardDescription>Únete a la comunidad GoLibre con tu información.</CardDescription>
+            </CardHeader>
+            <Form {...customerSignUpForm}>
+              <form onSubmit={customerSignUpForm.handleSubmit(handleCustomerSignUpSubmit)}>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="profileImageFile"
+                    render={() => (
+                      <FormItem className="flex flex-col items-center">
+                        <FormLabel htmlFor="profile-image-upload-home" className="cursor-pointer">
+                          <Avatar className="h-24 w-24 border-2 border-primary/50 hover:border-primary transition-colors">
+                            <AvatarImage src={imagePreview || undefined} alt="Foto de perfil" data-ai-hint="user avatar"/>
+                            <AvatarFallback>
+                              <Camera className="h-10 w-10 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            id="profile-image-upload-home"
+                            type="file"
+                            accept="image/png, image/jpeg, image/webp"
+                            className="sr-only"
+                            onChange={handleImageChange}
+                          />
+                        </FormControl>
+                        <FormDescription className="mt-1 text-center text-xs">
+                          Sube tu foto de perfil (Opcional).
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre Completo</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Juan Pérez" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número de Teléfono</FormLabel>
+                        <FormControl>
+                          <Input type="tel" placeholder="Ej: +18091234567" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Correo Electrónico</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="tu@correo.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contraseña</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                            <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={togglePasswordVisibility}>
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={customerSignUpForm.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Confirmar Contraseña</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                            <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={toggleConfirmPasswordVisibility}>
+                              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+                <CardFooter>
+                  <Button 
+                    type="submit" 
+                    className="w-full" 
+                    disabled={authLoading || customerSignUpForm.formState.isSubmitting}
+                  >
+                    {(authLoading || customerSignUpForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Registrarme como cliente
+                  </Button>
+                </CardFooter>
+              </form>
+            </Form>
+          </Card>
+        </TabsContent>
+      </Tabs>
       
       <div className="text-center w-full max-w-md">
         <p className="text-md font-medium text-foreground mb-3">¿Quieres ofrecer tus servicios en GoLibre?</p>
         <Button
-          onClick={() => router.push('/auth?next=/driver/dashboard')}
+          onClick={() => router.push('/auth?next=/driver/dashboard')} // This still goes to /auth for service providers
           variant="secondary"
           size="lg"
           className="w-full py-5 text-md"
@@ -280,3 +351,6 @@ export default function HomePage() {
     </div>
   );
 }
+
+
+    
