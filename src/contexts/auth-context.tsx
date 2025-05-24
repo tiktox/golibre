@@ -79,34 +79,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (storedRole) {
             setRoleState(storedRole);
           } else {
-            // If no role is stored, setRoleState to null.
-            // Role assignment will be handled by the auth page flow or other specific logic.
             setRoleState(null); 
           }
         } catch (error) {
           console.error("Error reading role from localStorage", error);
-          setRoleState(null); // Default to null on error
+          setRoleState(null); 
         }
       } else {
         setUser(null);
         setRoleState(null);
-        // If on a protected route and user signs out, redirect to home or auth
-        if (pathname !== '/' && pathname !== '/auth' && !pathname.startsWith('/services/restaurant/profile')) { // Keep restaurant profile accessible for now if direct link
-          // router.replace('/'); // Or '/auth'
+        if (pathname !== '/' && pathname !== '/auth' && !pathname.startsWith('/services/restaurant/profile')) { 
+          // router.replace('/'); 
         }
       }
-      setIsInitializing(false); // Initial check is done
+      setIsInitializing(false); 
       setLoading(false); 
     });
     
-    // Ensure isInitializing is set to false if onAuthStateChanged doesn't fire quickly
-    // (e.g., if Firebase SDK is slow to load or there's no initial user)
     const timer = setTimeout(() => {
       if (isInitializing) {
         setIsInitializing(false);
         setLoading(false);
       }
-    }, 2000); // Adjust timeout as needed
+    }, 2000); 
 
 
     return () => {
@@ -120,12 +115,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
-      // onAuthStateChanged handles user state updates.
       setLoading(false);
       return true;
     } catch (error: any) {
       console.error("Firebase Sign-In Error:", error);
-      toast({ variant: "destructive", title: "Error de inicio de sesión", description: error.message });
+      let description = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        description = "Correo electrónico o contraseña incorrectos. Por favor, verifica tus credenciales.";
+      } else if (error.message) {
+        description = error.message;
+      }
+      toast({ variant: "destructive", title: "Error de inicio de sesión", description });
       setLoading(false);
       return false;
     }
@@ -138,10 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userCredential.user) {
         if (displayName) {
           await updateProfile(userCredential.user, { displayName });
-           // The onAuthStateChanged listener will pick up the new user and set them.
-           // We don't setUser directly here to avoid race conditions with onAuthStateChanged.
         }
-        // Role assignment will be handled in AuthClientContent based on 'next' param
         toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
         setLoading(false);
         return true;
@@ -150,7 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     } catch (error: any) {
       console.error("Firebase Sign-Up Error:", error);
-      toast({ variant: "destructive", title: "Error de registro", description: error.message });
+      let description = "Ocurrió un error inesperado durante el registro. Por favor, inténtalo de nuevo.";
+      if (error.code === 'auth/email-already-in-use') {
+        description = "Esta dirección de correo electrónico ya está registrada. Por favor, intenta iniciar sesión o usa un correo diferente.";
+      } else if (error.message) {
+        description = error.message;
+      }
+      toast({ variant: "destructive", title: "Error de registro", description });
       setLoading(false);
       return false;
     }
@@ -160,8 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      // User and role will be set to null by onAuthStateChanged
-      router.push('/'); // Redirect to homepage after sign out
+      router.push('/'); 
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
     } catch (error: any) {
       console.error("Firebase Sign-Out Error:", error);
@@ -170,13 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, [router, toast]);
 
-  // This setRole is now more explicit, called from AuthClientContent or other role selection mechanisms
   const setRoleAndUpdateStorage = useCallback((newRole: UserRole) => {
     setLoading(true);
     if (user) {
       setAndStoreRole(newRole, user.uid);
     } else {
-      // This case should be rare if setRole is called after user is confirmed
       setRoleState(newRole); 
     }
     setLoading(false);
