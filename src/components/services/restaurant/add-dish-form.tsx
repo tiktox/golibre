@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Camera, Utensils, Coffee, IceCream, Sparkles, Users, Vegan, DollarSign, Loader2, Type } from "lucide-react"; // Added Type for title
+import { Camera, Utensils, Coffee, IceCream, Sparkles, Users, Vegan, DollarSign, Loader2, Type } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export const dishCategories = [
@@ -48,7 +48,6 @@ export const dishCategories = [
 
 const dishFormSchema = z.object({
   category: z.string().min(1, "Selecciona una categoría."),
-  // imageFile is handled separately, not part of Zod schema for direct form data
   title: z.string().min(2, { message: "El título debe tener al menos 2 caracteres." }),
   description: z.string().min(10, { message: "La descripción debe tener al menos 10 caracteres." }).max(200, {message: "Máximo 200 caracteres."}),
   price: z.string()
@@ -107,7 +106,6 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      // No need to setValue for 'imageFile' in form data as it's handled separately
     } else {
       setImageFile(null);
       setImagePreview(DEFAULT_DISH_PLACEHOLDER_IMAGE);
@@ -116,12 +114,11 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
 
   async function onSubmit(data: DishFormData) {
     await onDishAdd(data, imageFile);
-    // Modal closing and toast will be handled by the parent component (RestaurantProfilePage)
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <Utensils className="h-6 w-6 text-primary" />
@@ -161,7 +158,6 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               )}
             />
 
-            {/* Image File Input - Not part of react-hook-form data directly */}
             <FormItem className="flex flex-col items-center">
               <FormLabel htmlFor="dish-image-upload" className="cursor-pointer w-full aspect-[4/3] rounded-md border-2 border-dashed border-primary/50 hover:border-primary transition-colors flex items-center justify-center relative overflow-hidden bg-muted/50">
                 {imagePreview ? (
@@ -185,7 +181,7 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
               <FormDescription className="mt-1 text-center text-xs">
                 PNG, JPG, WEBP (Recomendado: 400x300px o similar).
               </FormDescription>
-              <FormMessage /> {/* For potential manual image validation errors if needed */}
+              <FormMessage />
             </FormItem>
 
             <FormField
@@ -223,20 +219,20 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
             <FormField
               control={control}
               name="price"
-              render={({ field: { onChange, value, ...restField } }) => ( // value will be number due to transform
+              render={({ field: { onChange, value, ...restField } }) => (
                 <FormItem>
                   <FormLabel className="text-md flex items-center gap-1"><DollarSign className="h-4 w-4"/>Precio (RD$)</FormLabel>
                   <FormControl>
                     <Input 
                       type="text" 
                       placeholder="Ej: 450.00" 
-                      value={value === undefined || isNaN(value) ? "" : String(value)} // Display as string
+                      value={value === undefined || isNaN(value) ? "" : String(value)}
                       onChange={(e) => {
                         const val = e.target.value;
-                        if (/^\d*\.?\d{0,2}$/.test(val)) { // Allow up to 2 decimal places
+                        if (/^\d*\.?\d{0,2}$/.test(val)) {
                            onChange(val); 
                         } else if (val === "") {
-                           onChange(""); // Allow clearing the input
+                           onChange("");
                         }
                       }}
                       {...restField} 
@@ -261,3 +257,5 @@ export default function AddDishForm({ isOpen, onOpenChange, onDishAdd }: AddDish
     </Dialog>
   );
 }
+
+    
