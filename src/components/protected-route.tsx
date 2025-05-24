@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading, isInitializing, setRole } = useAuth();
+  const { user, role, loading, isInitializing } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -21,48 +21,72 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     if (isInitializing || loading) return; 
 
     if (!user) {
-      router.replace(`/auth?redirect=${pathname}`); 
-      return;
-    }
-
-    if (allowedRoles === null) { 
-      if (role) { 
-        // If role is already set, redirect to driver dashboard (focus on driver)
-        router.replace('/driver/dashboard');
-      }
+      router.replace(`/auth?next=${pathname}`); 
       return;
     }
     
+    // If allowedRoles is explicitly null, it means any authenticated user can access (used for /role-selection before stricter logic)
+    // However, this state should be rare now. More typically, pages will have specific allowedRoles.
+    if (allowedRoles === null) {
+        // This path might be for pages like /role-selection that decide where to go next.
+        // If user has a role, they shouldn't linger here.
+        if (role === 'customer') {
+            router.replace('/customer/dashboard');
+            return;
+        }
+        if (role === 'driver') {
+            router.replace('/driver/dashboard');
+            return;
+        }
+        // If user is authenticated but no role, they should be on a page that helps them get a role or homepage.
+        // For now, if allowedRoles is null and no role, let it pass, assuming the page handles it.
+        return; 
+    }
+    
+    // If there's no role yet, and the page requires specific roles, redirect to auth or homepage.
+    // This handles the case where user is authenticated but role assignment is pending or failed.
     if (!role) { 
-      // Authenticated but no role. AuthContext should set 'customer' (which redirects to driver) by default.
-      router.replace('/'); 
+      router.replace(`/auth?next=${pathname}`); // Or perhaps to '/' to choose a path
       return;
     }
 
-    // If current role is 'customer', it's treated as 'driver' for UI purposes.
-    // So, if allowedRoles expects 'driver', a 'customer' role should pass.
-    // If allowedRoles specifically and only expects 'customer' (which is now removed),
-    // then access should be denied (redirected).
-    const effectiveRole = role === 'customer' ? 'driver' : role;
-
-    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(effectiveRole)) {
-      // Role is not allowed for this page.
-      // Redirect to driver dashboard as the main available authenticated section.
-      router.replace('/driver/dashboard');
+    // Standard role check
+    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+      // User's role is not in the allowed list. Redirect to their respective dashboard.
+      if (role === 'customer') {
+        router.replace('/customer/dashboard');
+      } else if (role === 'driver') {
+        router.replace('/driver/dashboard');
+      } else {
+        // Fallback if role is somehow invalid, go to homepage
+        router.replace('/');
+      }
       return;
     }
 
-  }, [user, role, loading, isInitializing, router, allowedRoles, pathname, setRole]);
+  }, [user, role, loading, isInitializing, router, allowedRoles, pathname]);
 
-  const showLoading = isInitializing || loading || !user ||
-                      (allowedRoles === null && !!role) || 
-                      (allowedRoles !== null && !role && user);                     
+  // Determine if loading screen should be shown
+  let showLoadingScreen = isInitializing || loading;
+  if (user && allowedRoles && allowedRoles.length > 0 && !role) {
+    // User is logged in, page requires specific roles, but role is not yet determined
+    showLoadingScreen = true;
+  }
+  if (user && role && allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+    // User is logged in, has a role, but it's not allowed - redirection is happening, show loader
+    showLoadingScreen = true;
+  }
+  if (!user && allowedRoles && allowedRoles.length > 0) {
+    // User is not logged in, but page requires roles (implies auth needed) - redirection to auth is happening
+    showLoadingScreen = true;
+  }
 
-  if (showLoading) {
+
+  if (showLoadingScreen) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] p-4">
         <LogoIcon className="w-16 h-16 mb-4 text-primary animate-pulse" />
-        <p className="text-lg text-muted-foreground mb-2">Securing your session...</p>
+        <p className="text-lg text-muted-foreground mb-2">Cargando...</p> {/* Simplified message */}
         <div className="space-y-2 w-full max-w-sm">
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-8 w-3/4" />

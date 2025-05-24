@@ -6,16 +6,18 @@ import LogoIcon from './icons/logo';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
 import { useRouter } from 'next/navigation';
-import { UserCog, LayoutDashboard } from 'lucide-react'; // Added LayoutDashboard
+import { UserCog, LayoutDashboard } from 'lucide-react';
 
 export default function Header() {
   const { user, role } = useAuth();
   const router = useRouter();
 
   const getDashboardLink = () => {
-    if (user && role === 'customer') return '/customer/dashboard';
-    if (user && role === 'driver') return '/driver/dashboard';
-    return '/'; // Fallback for no user or no role
+    if (user) {
+      if (role === 'customer') return '/customer/dashboard';
+      if (role === 'driver') return '/driver/dashboard';
+    }
+    return '/'; // Fallback for no user or no role yet determined
   };
 
   const getHeaderText = () => {
@@ -43,12 +45,11 @@ export default function Header() {
                     <LayoutDashboard className="mr-2 h-4 w-4" /> Panel Cliente
                 </Button>
               )}
-              {/* Service provider / multiservice panel button */}
-              {/* Show this if user is a driver, or if they are a customer (they might want to offer services) */}
-              {(role === 'driver' || role === 'customer') && (
+              
+              {role === 'driver' && (
                 <Button variant="ghost" size="sm" onClick={() => router.push('/driver/dashboard')} className="hidden sm:inline-flex">
                   <UserCog className="mr-2 h-4 w-4" /> 
-                  {role === 'driver' ? 'Panel Servicios' : 'Ofrecer Servicios'}
+                  Panel Servicios
                 </Button>
               )}
             </>
