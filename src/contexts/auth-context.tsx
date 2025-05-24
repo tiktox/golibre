@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(appUser);
         try {
           const storedRole = localStorage.getItem('golibre-role-' + firebaseUser.uid) as UserRole;
+          // If there's a stored role, use it. Otherwise, role remains null until explicitly set.
           if (storedRole) {
             setRoleState(storedRole);
           } else {
@@ -83,37 +84,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (error) {
           console.error("Error reading role from localStorage", error);
-          setRoleState(null); 
+          setRoleState(null); // Default to null if role cannot be read
         }
       } else {
         setUser(null);
         setRoleState(null);
-        if (pathname !== '/' && pathname !== '/auth' && !pathname.startsWith('/services/restaurant/profile')) { 
-          // router.replace('/'); 
-        }
+        // Removed automatic redirection to '/' to allow access to /auth page
+        // Redirection logic is primarily handled by individual pages or ProtectedRoute
       }
       setIsInitializing(false); 
       setLoading(false); 
     });
     
+    // Fallback to stop initializing state if onAuthStateChanged doesn't fire quickly
     const timer = setTimeout(() => {
       if (isInitializing) {
         setIsInitializing(false);
         setLoading(false);
+        // console.log("Auth initializing timed out, setting to false.");
       }
-    }, 2000); 
+    }, 2000); // Adjust timeout as needed
 
 
     return () => {
       unsubscribe();
       clearTimeout(timer);
     }
-  }, [isInitializing, setAndStoreRole, pathname]);
+  }, [isInitializing, setAndStoreRole, pathname]); // pathname removed as it caused too many re-runs.
 
   const signIn = useCallback(async (email: string, password: string): Promise<boolean> => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Role should be loaded by onAuthStateChanged and useEffect above
       toast({ title: "Inicio de sesión exitoso", description: "¡Bienvenido de nuevo!" });
       setLoading(false);
       return true;
@@ -139,14 +142,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (displayName) {
           await updateProfile(userCredential.user, { displayName });
         }
+        // User is signed up and (optionally) profile updated.
+        // Role assignment will be handled by AuthClientContent based on 'next' param.
         toast({ title: "Registro exitoso", description: "¡Bienvenido a GoLibre!" });
         setLoading(false);
         return true;
       }
+      // Should not happen if userCredential.user is not available after successful creation
       setLoading(false);
       return false;
     } catch (error: any) {
-      console.error("Firebase Sign-Up Error:", error);
+      console.error("Firebase Sign-Up Error:", error); // This logs the error to the console
       let description = "Ocurrió un error inesperado durante el registro. Por favor, inténtalo de nuevo.";
       if (error.code === 'auth/email-already-in-use') {
         description = "Esta dirección de correo electrónico ya está registrada. Por favor, intenta iniciar sesión o usa un correo diferente.";
@@ -163,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      router.push('/'); 
+      router.push('/'); // Redirect to homepage after sign out
       toast({ title: "Sesión cerrada", description: "Has cerrado sesión correctamente." });
     } catch (error: any) {
       console.error("Firebase Sign-Out Error:", error);
@@ -177,6 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       setAndStoreRole(newRole, user.uid);
     } else {
+      // This case should ideally not happen if setting role for a logged-in user,
+      // but as a fallback, just update the state.
       setRoleState(newRole); 
     }
     setLoading(false);
