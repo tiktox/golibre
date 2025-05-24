@@ -94,7 +94,7 @@ export default function HomePage() {
   const handleCustomerSignUp = async (data: CustomerSignUpFormData) => {
     const success = await signUp(data.email, data.password, data.fullName, data.phoneNumber, imageFile);
     if (success) {
-      await setRole('customer'); // Automatically set role to customer
+      await setRole('customer'); 
       toast({ title: "¡Registro Exitoso!", description: `Bienvenido ${data.fullName}. Ahora eres un cliente.`});
       // Redirection is handled by useEffect after role and user state update
     }
@@ -103,7 +103,7 @@ export default function HomePage() {
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
   const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
 
-  if (isInitializing || (authLoading && !user)) { // Show loading if initializing or auth is loading and no user yet
+  if (isInitializing || (authLoading && !user)) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-background p-8 text-center">
         <LogoIcon className="w-20 h-20 mb-6 text-primary animate-pulse" />
@@ -113,7 +113,6 @@ export default function HomePage() {
     );
   }
   
-  // If user is logged in, useEffect will redirect. Show nothing or a brief redirecting message.
   if (user && !authLoading && !isInitializing) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] p-4">
@@ -123,7 +122,6 @@ export default function HomePage() {
     );
   }
 
-  // Display signup form if no user
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/10 p-4 sm:p-8">
       <LogoIcon className="w-20 h-20 mb-6 text-primary" />
@@ -245,8 +243,20 @@ export default function HomePage() {
                 )}
               />
             </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={authLoading || customerForm.formState.isSubmitting}>
+            <CardFooter className="flex flex-col sm:flex-row gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full sm:w-auto" 
+                onClick={() => router.push('/auth?tab=signin')}
+              >
+                Iniciar Sesión
+              </Button>
+              <Button 
+                type="submit" 
+                className="w-full sm:w-auto flex-grow" 
+                disabled={authLoading || customerForm.formState.isSubmitting}
+              >
                 {(authLoading || customerForm.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registrarme como cliente
               </Button>

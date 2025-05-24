@@ -31,8 +31,6 @@ const signInSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
 });
 
-// This schema is for the /auth page, primarily for service providers or general signup.
-// Customer signup is now primarily on the homepage.
 const authPageSignUpSchema = z.object({
   profileImageFile: z.any().optional(),
   fullName: z.string().min(3, { message: "El nombre completo debe tener al menos 3 caracteres." }),
@@ -64,21 +62,20 @@ export default function AuthClientContent() {
   const [imagePreview, setImagePreview] = useState<string | null>(DEFAULT_AVATAR_PLACEHOLDER);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
+  const initialTab = searchParams.get('tab') === 'signin' ? 'signin' : 'signup';
+
 
   useEffect(() => {
-     if (!isInitializing && !authLoading && user) { // User is logged in
+     if (!isInitializing && !authLoading && user) { 
       const nextUrl = searchParams.get('next');
       if (nextUrl) {
         router.replace(nextUrl);
       } else {
-        // Fallback redirection based on role if 'next' is not present
         if (role === 'customer') {
           router.replace('/customer/dashboard');
         } else if (role === 'driver') {
           router.replace('/driver/dashboard');
         } else {
-          // If user is logged in but no role and no nextUrl, this is an edge case.
-          // Maybe redirect to a role selection or a generic dashboard. For now, homepage.
           router.replace('/'); 
         }
       }
@@ -130,14 +127,15 @@ export default function AuthClientContent() {
       const nextUrl = searchParams.get('next');
       let newRole: UserRole = null;
 
-      // Determine role based on 'next' parameter if user signed up via /auth page
       if (nextUrl?.startsWith('/driver') || nextUrl?.startsWith('/services')) {
         newRole = 'driver';
-      } else if (nextUrl?.startsWith('/customer')) { // Less likely now, but good to keep
+      } else if (nextUrl?.startsWith('/customer')) { 
         newRole = 'customer';
       } else {
         // If signup on /auth page has no clear 'next' for role, default to 'driver'
-        // as customer signup is now primarily on homepage.
+        // if they came here through "Offer services" button (which won't have 'next')
+        // or if they somehow landed here without a clear 'next'.
+        // This scenario is less likely now that customer signup is on homepage.
         newRole = 'driver'; 
       }
       await setRole(newRole);
@@ -158,7 +156,7 @@ export default function AuthClientContent() {
     );
   }
 
-  if (user && !authLoading && !isInitializing) { // User is logged in, useEffect will redirect
+  if (user && !authLoading && !isInitializing) { 
      return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -170,7 +168,7 @@ export default function AuthClientContent() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,4rem))] bg-secondary/20 p-4 sm:p-8">
       <LogoIcon className="w-20 h-20 mb-6 text-primary" />
-      <Tabs defaultValue="signup" className="w-full max-w-md">
+      <Tabs defaultValue={initialTab} className="w-full max-w-md">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Iniciar Sesión</TabsTrigger>
           <TabsTrigger value="signup">Registrarse</TabsTrigger>
